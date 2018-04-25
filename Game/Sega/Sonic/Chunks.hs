@@ -5,7 +5,7 @@ module Game.Sega.Sonic.Chunks (
 import           Control.Lens
 import           Control.Monad.IO.Class (MonadIO (..))
 import           Data.Array             (Array, listArray, (!))
-import           Data.Bits              (shiftL, (.&.), (.|.))
+import           Data.Bits
 import           Data.List.Split        (chunksOf)
 import           Data.Word              (Word16, Word8)
 import           Debug.Trace
@@ -26,7 +26,11 @@ loadChunk renderer blocks s = do
       let
         rectangle =
           Rectangle (P (V2 (fromIntegral x * 0x10) (fromIntegral y * 0x10))) 0x10
-      in copy renderer (blocks ! (i .&. 0x3FF)) Nothing (Just rectangle)
+        flipY =
+          testBit i 0xB
+        flipX =
+          testBit i 0xA
+      in copyEx renderer (blocks ! (i .&. 0x3FF)) Nothing (Just rectangle) 0 Nothing (V2 flipX flipY)
   pure texture
 
 loadChunks :: (MonadIO m) => Renderer -> Array Word16 Texture -> [Word8] -> m (Array Word8 Texture)
