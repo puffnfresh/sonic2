@@ -52,6 +52,15 @@ cpz1Paths =
              ("s2disasm" </> "art" </> "palettes" </> "CPZ.bin")
              ("s2disasm" </> "art" </> "kosinski" </> "CPZ_DEZ.bin")
 
+dezPaths :: LevelPaths
+dezPaths =
+  LevelPaths ("s2disasm" </> "level" </> "layout" </> "DEZ.bin")
+             ("s2disasm" </> "mappings" </> "128x128" </> "CPZ_DEZ.bin")
+             ("s2disasm" </> "mappings" </> "16x16" </> "CPZ_DEZ.bin")
+             ("s2disasm" </> "collision" </> "CPZ and DEZ primary 16x16 collision index.bin")
+             ("s2disasm" </> "art" </> "palettes" </> "DEZ.bin")
+             ("s2disasm" </> "art" </> "kosinski" </> "CPZ_DEZ.bin")
+
 data SonicError
   = SonicLoadError FilePath
   | SonicDecompressionError FilePath
@@ -73,9 +82,9 @@ renderLevelCollisions renderer paths = do
 
   let reindexedCollsionTextures = (collisionTextures !) <$> collisionIndex
 
-  liftIO $ putStrLn "Loading chunks..."
   now <- liftIO getCurrentTime
   chunksContent <- decompressFile $ levelChunksPath paths
+  liftIO $ putStrLn "Loading chunks..."
   chunksTextures <- loadChunks renderer reindexedCollsionTextures chunksContent
   now' <- liftIO getCurrentTime
   liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
