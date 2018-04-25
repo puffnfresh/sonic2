@@ -43,6 +43,15 @@ ehz2Paths =
              ("s2disasm" </> "art" </> "palettes" </> "EHZ.bin")
              ("s2disasm" </> "art" </> "kosinski" </> "EHZ_HTZ.bin")
 
+cpz1Paths :: LevelPaths
+cpz1Paths =
+  LevelPaths ("s2disasm" </> "level" </> "layout" </> "CPZ_1.bin")
+             ("s2disasm" </> "mappings" </> "128x128" </> "CPZ_DEZ.bin")
+             ("s2disasm" </> "mappings" </> "16x16" </> "CPZ_DEZ.bin")
+             ("s2disasm" </> "collision" </> "CPZ and DEZ primary 16x16 collision index.bin")
+             ("s2disasm" </> "art" </> "palettes" </> "CPZ.bin")
+             ("s2disasm" </> "art" </> "kosinski" </> "CPZ_DEZ.bin")
+
 data SonicError
   = SonicLoadError FilePath
   | SonicDecompressionError FilePath
@@ -79,7 +88,7 @@ main = do
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 1024 768 }
   renderer <- createRenderer window (-1) defaultRenderer
 
-  Right chunkTextures <- runExceptT $ renderLevelCollisions renderer ehz2Paths
+  Right chunkTextures <- runExceptT $ renderLevelCollisions renderer cpz1Paths
 
   rendererRenderTarget renderer $= Nothing
 
