@@ -12,6 +12,7 @@ executable sonic2
   main-is:             Main.hs
   other-modules:       Game.Sega.Sonic.Chunks
                      , Game.Sega.Sonic.Collision
+                     , Game.Sega.Sonic.Layout
   build-depends:       base
                      , array
                      , bytestring

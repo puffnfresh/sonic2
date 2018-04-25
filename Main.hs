@@ -12,6 +12,7 @@ import           Data.Time                  (diffUTCTime, getCurrentTime)
 import           Data.Word
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
+import           Game.Sega.Sonic.Layout
 import           SDL
 import           System.FilePath.Posix
 
@@ -44,7 +45,7 @@ decompressFile path = do
   content <- maybe (throwError $ SonicLoadError path) pure maybeContent
   maybe (throwError $ SonicDecompressionError path) pure $ Kosinski.decompress content
 
-renderLevelCollisions :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m (Array Word8 Texture)
+renderLevelCollisions :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m [[Texture]]
 renderLevelCollisions renderer paths = do
   collisionIndexContent <- decompressFile $ levelCollisionPath paths
   let collisionIndex = loadCollisionIndex collisionIndexContent
@@ -60,7 +61,9 @@ renderLevelCollisions renderer paths = do
   chunksTextures <- loadChunks renderer reindexedCollsionTextures chunksContent
   now' <- liftIO getCurrentTime
   liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
-  pure chunksTextures
+
+  layoutContent <- decompressFile $ levelLayoutPath paths
+  pure $ loadLayout chunksTextures layoutContent
 
 main :: IO ()
 main = do
@@ -72,7 +75,7 @@ main = do
   rendererRenderTarget renderer $= Nothing
 
   let
-    appLoop x = do
+    appLoop o p = do
       events <- pollEvents
       let
         eventIsPress keycode event =
@@ -82,18 +85,30 @@ main = do
               keysymKeycode (keyboardEventKeysym keyboardEvent) == keycode
             _ ->
               False
+        isPressed keycode =
+          any (eventIsPress keycode) events
         qPressed =
-          any (eventIsPress KeycodeQ) events
+          isPressed KeycodeQ
         rightPressed =
-          any (eventIsPress KeycodeRight) events
+          isPressed KeycodeRight
         leftPressed =
-          any (eventIsPress KeycodeLeft) events
-        x' =
-          x + if rightPressed then 0x10 else 0 + if leftPressed then -0x10 else 0
+          isPressed KeycodeLeft
+        downPressed =
+          isPressed KeycodeDown
+        upPressed =
+          isPressed KeycodeUp
+        o' =
+          o + if rightPressed then 0x10 else 0 + if leftPressed then -0x10 else 0
+        p' =
+          p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
       rendererDrawColor renderer $= V4 0 0 255 255
       clear renderer
-      ifor_ chunkTextures $ \i texture ->
-        copy renderer texture Nothing (Just (Rectangle (P (V2 ((0x80 * fromIntegral i) - x') 0)) 0x80))
+      ifor_ chunkTextures $ \y row ->
+        ifor_ row $ \x texture ->
+          let
+            rectangle =
+              Rectangle (P (V2 ((fromIntegral x * 0x80) - o') ((fromIntegral y * 0x80) - p))) 0x80
+          in copy renderer texture Nothing (Just rectangle)
       present renderer
-      unless qPressed (appLoop x')
-  appLoop 0
+      unless qPressed (appLoop o' p')
+  appLoop 0 0

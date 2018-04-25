@@ -8,7 +8,6 @@ import           Data.Array             (Array, listArray, (!))
 import           Data.Bits
 import           Data.List.Split        (chunksOf)
 import           Data.Word              (Word16, Word8)
-import           Debug.Trace
 import           SDL
 
 word16s :: [Word8] -> [Word16]
