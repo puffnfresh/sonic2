@@ -1,5 +1,5 @@
-{ mkDerivation, array, base, bytestring, filepath, halves, kosinski
-, lens, megadrive-palette, mtl, sdl2, split, stdenv
+{ mkDerivation, array, base, bytestring, filepath, kosinski, lens
+, megadrive-palette, mtl, sdl2, split, stdenv
 }:
 mkDerivation {
   pname = "sonic2";
@@ -8,8 +8,8 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [
-    array base bytestring filepath halves kosinski lens
-    megadrive-palette mtl sdl2 split
+    array base bytestring filepath kosinski lens megadrive-palette mtl
+    sdl2 split
   ];
   license = stdenv.lib.licenses.bsd3;
 }
