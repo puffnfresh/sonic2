@@ -10,12 +10,14 @@ cabal-version:       >=1.10
 
 executable sonic2
   main-is:             Main.hs
-  other-modules:       Game.Sega.Sonic.Collision
+  other-modules:       Game.Sega.Sonic.Chunks
+                     , Game.Sega.Sonic.Collision
   build-depends:       base
                      , array
                      , bytestring
                      , filepath
                      , mtl
+                     , time
                      , kosinski
                      , lens
                      , megadrive-palette

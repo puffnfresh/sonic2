@@ -1,11 +1,16 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 import qualified Codec.Compression.Kosinski as Kosinski
 import           Control.Lens
 import           Control.Monad.Except
 import           Data.Array
 import qualified Data.ByteString            as BS
+import           Data.Semigroup             ((<>))
+import           Data.Time                  (diffUTCTime, getCurrentTime)
 import           Data.Word
+import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           SDL
 import           System.FilePath.Posix
@@ -33,13 +38,13 @@ data SonicError
   | SonicDecompressionError FilePath
   deriving (Eq, Ord, Show)
 
-decompressFile :: FilePath -> ExceptT SonicError IO [Word8]
+decompressFile :: (MonadError SonicError m, MonadIO m) => FilePath -> m [Word8]
 decompressFile path = do
   maybeContent <- liftIO $ Kosinski.compressedFile path
   content <- maybe (throwError $ SonicLoadError path) pure maybeContent
   maybe (throwError $ SonicDecompressionError path) pure $ Kosinski.decompress content
 
-renderLevelCollisions :: Renderer -> LevelPaths -> ExceptT SonicError IO (Array Word16 Texture)
+renderLevelCollisions :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m (Array Word8 Texture)
 renderLevelCollisions renderer paths = do
   collisionIndexContent <- decompressFile $ levelCollisionPath paths
   let collisionIndex = loadCollisionIndex collisionIndexContent
@@ -47,14 +52,24 @@ renderLevelCollisions renderer paths = do
   collisionContent <- liftIO $ BS.readFile ("s2disasm" </> "collision" </> "Collision array 1.bin")
   collisionTextures <- liftIO $ loadCollisionTextures renderer collisionContent
 
-  return $ (collisionTextures !) <$> collisionIndex
+  let reindexedCollsionTextures = (collisionTextures !) <$> collisionIndex
+
+  liftIO $ putStrLn "Loading chunks..."
+  now <- liftIO getCurrentTime
+  chunksContent <- decompressFile $ levelChunksPath paths
+  chunksTextures <- loadChunks renderer reindexedCollsionTextures chunksContent
+  now' <- liftIO getCurrentTime
+  liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
+  pure chunksTextures
 
 main :: IO ()
 main = do
   window <- createWindow "Sonic 2" defaultWindow
   renderer <- createRenderer window (-1) defaultRenderer
 
-  Right collisionTextures <- runExceptT $ renderLevelCollisions renderer ehzPaths
+  Right chunkTextures <- runExceptT $ renderLevelCollisions renderer ehzPaths
+
+  rendererRenderTarget renderer $= Nothing
 
   let
     appLoop = do
@@ -68,8 +83,8 @@ main = do
           qPressed = any eventIsQPress events
       rendererDrawColor renderer $= V4 0 0 255 255
       clear renderer
-      ifor_ collisionTextures $ \i texture ->
-        copy renderer texture Nothing (Just (Rectangle (P (V2 (0x11 * fromIntegral i) 0)) 0x10))
+      ifor_ chunkTextures $ \i texture ->
+        copy renderer texture Nothing (Just (Rectangle (P (V2 (0x80 * fromIntegral i) 0)) 0x80))
       present renderer
       unless qPressed appLoop
   appLoop
