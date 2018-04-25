@@ -1,0 +1,3 @@
+[submodule "s2disasm"]
+	path = s2disasm
+	url = https://github.com/sonicretro/s2disasm.git
