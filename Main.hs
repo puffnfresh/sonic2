@@ -25,9 +25,18 @@ data LevelPaths
                , levelArtPath       :: FilePath
                }
 
-ehzPaths :: LevelPaths
-ehzPaths =
+ehz1Paths :: LevelPaths
+ehz1Paths =
   LevelPaths ("s2disasm" </> "level" </> "layout" </> "EHZ_1.bin")
+             ("s2disasm" </> "mappings" </> "128x128" </> "EHZ_HTZ.bin")
+             ("s2disasm" </> "mappings" </> "16x16" </> "EHZ.bin")
+             ("s2disasm" </> "collision" </> "EHZ and HTZ primary 16x16 collision index.bin")
+             ("s2disasm" </> "art" </> "palettes" </> "EHZ.bin")
+             ("s2disasm" </> "art" </> "kosinski" </> "EHZ_HTZ.bin")
+
+ehz2Paths :: LevelPaths
+ehz2Paths =
+  LevelPaths ("s2disasm" </> "level" </> "layout" </> "EHZ_2.bin")
              ("s2disasm" </> "mappings" </> "128x128" </> "EHZ_HTZ.bin")
              ("s2disasm" </> "mappings" </> "16x16" </> "EHZ.bin")
              ("s2disasm" </> "collision" </> "EHZ and HTZ primary 16x16 collision index.bin")
@@ -70,7 +79,7 @@ main = do
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 1024 768 }
   renderer <- createRenderer window (-1) defaultRenderer
 
-  Right chunkTextures <- runExceptT $ renderLevelCollisions renderer ehzPaths
+  Right chunkTextures <- runExceptT $ renderLevelCollisions renderer ehz2Paths
 
   rendererRenderTarget renderer $= Nothing
 
