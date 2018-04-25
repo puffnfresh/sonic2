@@ -64,7 +64,7 @@ renderLevelCollisions renderer paths = do
 
 main :: IO ()
 main = do
-  window <- createWindow "Sonic 2" defaultWindow
+  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 1024 768 }
   renderer <- createRenderer window (-1) defaultRenderer
 
   Right chunkTextures <- runExceptT $ renderLevelCollisions renderer ehzPaths
@@ -72,19 +72,28 @@ main = do
   rendererRenderTarget renderer $= Nothing
 
   let
-    appLoop = do
+    appLoop x = do
       events <- pollEvents
-      let eventIsQPress event =
-            case eventPayload event of
-              KeyboardEvent keyboardEvent ->
-                keyboardEventKeyMotion keyboardEvent == Pressed &&
-                keysymKeycode (keyboardEventKeysym keyboardEvent) == KeycodeQ
-              _ -> False
-          qPressed = any eventIsQPress events
+      let
+        eventIsPress keycode event =
+          case eventPayload event of
+            KeyboardEvent keyboardEvent ->
+              keyboardEventKeyMotion keyboardEvent == Pressed &&
+              keysymKeycode (keyboardEventKeysym keyboardEvent) == keycode
+            _ ->
+              False
+        qPressed =
+          any (eventIsPress KeycodeQ) events
+        rightPressed =
+          any (eventIsPress KeycodeRight) events
+        leftPressed =
+          any (eventIsPress KeycodeLeft) events
+        x' =
+          x + if rightPressed then 0x10 else 0 + if leftPressed then -0x10 else 0
       rendererDrawColor renderer $= V4 0 0 255 255
       clear renderer
       ifor_ chunkTextures $ \i texture ->
-        copy renderer texture Nothing (Just (Rectangle (P (V2 (0x80 * fromIntegral i) 0)) 0x80))
+        copy renderer texture Nothing (Just (Rectangle (P (V2 ((0x80 * fromIntegral i) - x') 0)) 0x80))
       present renderer
-      unless qPressed appLoop
-  appLoop
+      unless qPressed (appLoop x')
+  appLoop 0
