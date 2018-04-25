@@ -3,6 +3,7 @@ module Game.Sega.Sonic.Collision (
 , collisionPixel
 , loadCollisionTexture
 , loadCollisionTextures
+, loadCollisionIndex
 ) where
 
 import           Control.Applicative     (liftA2)
@@ -14,7 +15,7 @@ import qualified Data.ByteString         as BS
 import           Data.ByteString.Builder (toLazyByteString, word32LE)
 import qualified Data.ByteString.Lazy    as BSL
 import           Data.List.Split         (chunksOf)
-import           Data.Word               (Word32, Word8)
+import           Data.Word               (Word32, Word16, Word8)
 import           SDL
 
 collisionHeight :: Word8 -> Maybe Word8
@@ -46,3 +47,7 @@ loadCollisionTexture renderer s = do
 loadCollisionTextures :: (MonadIO m) => Renderer -> BS.ByteString -> m (Array Word8 Texture)
 loadCollisionTextures renderer =
   fmap (listArray (0, 0xFF)) . traverse (loadCollisionTexture renderer) . chunksOf 0x10 . BS.unpack
+
+loadCollisionIndex :: [Word8] -> Array Word16 Word8
+loadCollisionIndex =
+  listArray (0, 0x2FF)
