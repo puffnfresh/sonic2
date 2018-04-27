@@ -48,6 +48,6 @@ loadCollisionTextures :: (MonadIO m) => Renderer -> BS.ByteString -> m (Array Wo
 loadCollisionTextures renderer =
   fmap (listArray (0, 0xFF)) . traverse (loadCollisionTexture renderer) . chunksOf 0x10 . BS.unpack
 
-loadCollisionIndex :: [Word8] -> Array Word16 Word8
+loadCollisionIndex :: BS.ByteString -> Array Word16 Word8
 loadCollisionIndex =
-  listArray (0, 0x2FF)
+  listArray (0, 0x2FF) . BS.unpack

@@ -1,13 +1,19 @@
-{ mkDerivation, base, bytestring, fetchgit, lens, stdenv }:
+{ mkDerivation, base, bytestring, deepseq, fetchgit, filepath, lens
+, mtl, stdenv, tasty, tasty-hunit, time
+}:
 mkDerivation {
   pname = "kosinski";
   version = "0.1.0.0";
   src = fetchgit {
     url = "https://github.com/puffnfresh/kosinski.git";
-    sha256 = "1yfc6v5rw1mg8j6m11bspm2fh2njsnlr7qa3dzbaid004pl1cdr1";
-    rev = "e745fcf519db09da6047ad72fc388e18a64b542f";
+    sha256 = "1xfz4jh90kn6mzi1y6qvm7d7s1prhb8fis8m3b7xv1bzqpczlzml";
+    rev = "96e63c1f5fc2fd4f0fc780336c8a200bd06bf069";
   };
-  libraryHaskellDepends = [ base bytestring lens ];
+  libraryHaskellDepends = [ base bytestring lens mtl ];
+  testHaskellDepends = [ base bytestring tasty tasty-hunit ];
+  benchmarkHaskellDepends = [
+    base bytestring deepseq filepath time
+  ];
   description = "Compression used in Sonic the Hedgehog";
   license = stdenv.lib.licenses.bsd3;
 }

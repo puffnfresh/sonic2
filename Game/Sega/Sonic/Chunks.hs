@@ -6,6 +6,7 @@ import           Control.Lens
 import           Control.Monad.IO.Class (MonadIO (..))
 import           Data.Array             (Array, listArray, (!))
 import           Data.Bits
+import qualified Data.ByteString        as BS
 import           Data.List.Split        (chunksOf)
 import           Data.Word              (Word16, Word8)
 import           SDL
@@ -32,6 +33,6 @@ loadChunk renderer blocks s = do
       in copyEx renderer (blocks ! (i .&. 0x3FF)) Nothing (Just rectangle) 0 Nothing (V2 flipX flipY)
   pure texture
 
-loadChunks :: (MonadIO m) => Renderer -> Array Word16 Texture -> [Word8] -> m (Array Word8 Texture)
+loadChunks :: (MonadIO m) => Renderer -> Array Word16 Texture -> BS.ByteString -> m (Array Word8 Texture)
 loadChunks renderer blocks =
-  fmap (listArray (0, 0xFF)) . traverse (loadChunk renderer blocks . chunksOf 0x10) . chunksOf 0x80
+  fmap (listArray (0, 0xFF)) . traverse (loadChunk renderer blocks . chunksOf 0x10) . chunksOf 0x80 . BS.unpack

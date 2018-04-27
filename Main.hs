@@ -7,13 +7,18 @@ import           Control.Lens
 import           Control.Monad.Except
 import           Data.Array
 import qualified Data.ByteString            as BS
+import           Data.List.Split
 import           Data.Semigroup             ((<>))
 import           Data.Time                  (diffUTCTime, getCurrentTime)
+import           Data.Vector.Storable       (fromList)
 import           Data.Word
+import           Game.Sega.Sonic.Blocks
+import           Game.Sega.Sonic.Cells
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Layout
 import           SDL
+import           Sega.MegaDrive.Palette
 import           System.FilePath.Posix
 
 data LevelPaths
@@ -64,9 +69,10 @@ dezPaths =
 data SonicError
   = SonicLoadError FilePath
   | SonicDecompressionError FilePath
+  | SonicPaletteError FilePath
   deriving (Eq, Ord, Show)
 
-decompressFile :: (MonadError SonicError m, MonadIO m) => FilePath -> m [Word8]
+decompressFile :: (MonadError SonicError m, MonadIO m) => FilePath -> m BS.ByteString
 decompressFile path = do
   maybeContent <- liftIO $ Kosinski.compressedFile path
   content <- maybe (throwError $ SonicLoadError path) pure maybeContent
@@ -92,12 +98,30 @@ renderLevelCollisions renderer paths = do
   layoutContent <- decompressFile $ levelLayoutPath paths
   pure $ loadLayout chunksTextures layoutContent
 
+bgr :: BGR ColorNibble -> V4 Word8
+bgr (BGR b g r) =
+  V4 (nibbleToByte r) (nibbleToByte g) (nibbleToByte b) 0xFF
+
+renderLevelBlocks :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m [[Texture]]
+renderLevelBlocks renderer paths = do
+  maybePalette <- liftIO $ readPalette <$> BS.readFile (levelPalettePath paths)
+  palette <- maybe (throwError . SonicPaletteError $ levelPalettePath paths) (pure . listArray (0, 3) . fmap fromList . chunksOf 0x10 . (<> replicate 32 0xFF000000) . (replicate 16 0xFF000000 <>) . fmap bgr) maybePalette
+  cellContent <- decompressFile $ levelArtPath paths
+  cellSurfaces <- loadCells cellContent
+  blockContent <- decompressFile $ levelBlocksPath paths
+  blockTextures <- loadBlocks renderer palette cellSurfaces blockContent
+  chunkContent <- decompressFile $ levelChunksPath paths
+  chunkTextures <- loadChunks renderer blockTextures chunkContent
+  layoutContent <- decompressFile $ levelLayoutPath paths
+  pure $ loadLayout chunkTextures layoutContent
+
 main :: IO ()
 main = do
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 1024 768 }
   renderer <- createRenderer window (-1) defaultRenderer
 
-  Right chunkTextures <- runExceptT $ renderLevelCollisions renderer cpz1Paths
+  -- Right chunkTextures <- runExceptT $ renderLevelCollisions renderer dezPaths
+  Right chunkTextures <- runExceptT $ renderLevelBlocks renderer cpz1Paths
 
   rendererRenderTarget renderer $= Nothing
 
