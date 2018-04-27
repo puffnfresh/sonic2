@@ -15,6 +15,7 @@ executable sonic2
                      , Game.Sega.Sonic.Chunks
                      , Game.Sega.Sonic.Collision
                      , Game.Sega.Sonic.Layout
+                     , Game.Sega.Sonic.Palette
   build-depends:       base
                      , array
                      , bytestring
