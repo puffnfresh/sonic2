@@ -21,27 +21,34 @@ word16s (a:b:cs) =
 word16s _ =
   []
 
-blitCell :: (MonadIO m) => Array Word8 (Vector (V4 Word8)) -> Surface -> Array Word16 Surface -> Word16 -> V2 CInt -> m ()
-blitCell palette surface cells c v = do
+copyCell :: (MonadIO m) => Renderer -> Array Word8 (Vector (V4 Word8)) -> Array Word16 Surface -> Word16 -> V2 CInt -> m ()
+copyCell renderer palette cells c v = do
   let
     cellSurface =
       cells ! (c .&. 0x7FF)
     paletteIndex =
       fromIntegral (c `shiftR` 13 .&. 0x3)
+    flipY =
+      testBit c 0xC
+    flipX =
+      testBit c 0xB
   format <- surfaceFormat cellSurface
   maybeCellPalette <- formatPalette format
   for_ maybeCellPalette $ \cellPalette ->
     setPaletteColors cellPalette (palette ! paletteIndex) 0
-  void . surfaceBlit cellSurface Nothing surface . Just $ P v
+  cellTexture <- createTextureFromSurface renderer cellSurface
+  copyEx renderer cellTexture Nothing (Just $ Rectangle (P v) 8) 0 Nothing $ V2 flipX flipY
+  destroyTexture cellTexture
 
 loadBlock :: (MonadIO m) => Renderer -> Array Word8 (Vector (V4 Word8)) -> Array Word16 Surface -> [Word16] -> m Texture
 loadBlock renderer palette cells c = do
-  surface <- createRGBSurface (V2 0x10 0x10) ABGR8888
-  blitCell palette surface cells (c !! 0) $ V2 0 0
-  blitCell palette surface cells (c !! 1) $ V2 8 0
-  blitCell palette surface cells (c !! 2) $ V2 0 8
-  blitCell palette surface cells (c !! 3) $ V2 8 8
-  createTextureFromSurface renderer surface
+  texture <- createTexture renderer ABGR8888 TextureAccessTarget $ V2 0x10 0x10
+  rendererRenderTarget renderer $= Just texture
+  copyCell renderer palette cells (c !! 0) $ V2 0 0
+  copyCell renderer palette cells (c !! 1) $ V2 8 0
+  copyCell renderer palette cells (c !! 2) $ V2 0 8
+  copyCell renderer palette cells (c !! 3) $ V2 8 8
+  pure texture
 
 emptyTexture :: (MonadIO m) => Renderer -> m Texture
 emptyTexture renderer = do
