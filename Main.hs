@@ -254,6 +254,7 @@ main :: IO ()
 main = do
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 1024 768 }
   renderer <- createRenderer window (-1) defaultRenderer
+  rendererLogicalSize renderer $= Just (V2 320 224)
 
   -- Right chunkTextures <- runExceptT $ renderLevelCollisions renderer htz1Paths
   -- Right chunkTextures <- runExceptT $ renderLevelBlocks renderer htz1Paths
