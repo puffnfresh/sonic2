@@ -176,6 +176,15 @@ mtz2Paths =
              ("s2disasm" </> "art" </> "palettes" </> "MTZ.bin")
              ("s2disasm" </> "art" </> "kosinski" </> "MTZ.bin")
 
+mtz3Paths :: LevelPaths
+mtz3Paths =
+  LevelPaths ("s2disasm" </> "level" </> "layout" </> "MTZ_3.bin")
+             ("s2disasm" </> "mappings" </> "128x128" </> "MTZ.bin")
+             ("s2disasm" </> "mappings" </> "16x16" </> "MTZ.bin")
+             ("s2disasm" </> "collision" </> "MTZ primary 16x16 collision index.bin")
+             ("s2disasm" </> "art" </> "palettes" </> "MTZ.bin")
+             ("s2disasm" </> "art" </> "kosinski" </> "MTZ.bin")
+
 sczPaths :: LevelPaths
 sczPaths =
   LevelPaths ("s2disasm" </> "level" </> "layout" </> "SCZ.bin")
@@ -248,7 +257,7 @@ main = do
   renderer <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer $= Just (V2 320 224)
 
-  Right (chunkTextures, collisionTextures) <- runExceptT $ runReaderT (liftA2 (,) (ReaderT $ renderLevelBlocks renderer) (ReaderT $ renderLevelCollisions renderer)) ehz1Paths
+  Right (chunkTextures, collisionTextures) <- runExceptT $ runReaderT (liftA2 (,) (ReaderT $ renderLevelBlocks renderer) (ReaderT $ renderLevelCollisions renderer)) mtz3Paths
 
   rendererRenderTarget renderer $= Nothing
 
