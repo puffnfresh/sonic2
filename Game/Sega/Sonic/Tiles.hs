@@ -1,5 +1,5 @@
-module Game.Sega.Sonic.Cells (
-  loadCells
+module Game.Sega.Sonic.Tiles (
+  loadTiles
 ) where
 
 import           Control.Monad.IO.Class (MonadIO (..))
@@ -13,8 +13,8 @@ import           Foreign.Ptr            (Ptr, castPtr)
 import           Foreign.Storable       (pokeElemOff)
 import           SDL
 
-loadCell :: (MonadIO m) => [[Word8]] -> m Surface
-loadCell c = do
+loadTile :: (MonadIO m) => [[Word8]] -> m Surface
+loadTile c = do
   surface <- createRGBSurface (V2 8 8) Index8
   lockSurface surface
   ptr <- surfacePixels surface
@@ -35,7 +35,7 @@ splitByte :: Word8 -> [Word8]
 splitByte a =
   [a `shiftR` 4, a .&. 0xF]
 
-loadCells :: (MonadIO m) => BS.ByteString -> m (BoundedArray Word16 Surface)
-loadCells c = do
+loadTiles :: (MonadIO m) => BS.ByteString -> m (BoundedArray Word16 Surface)
+loadTiles c = do
   e <- emptySurface
-  fmap (listArrayFill e) . traverse (loadCell . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c
+  fmap (listArrayFill e) . traverse (loadTile . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c

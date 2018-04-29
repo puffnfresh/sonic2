@@ -15,4 +15,4 @@ fromBGR (BGR b g r) =
 
 loadPalette :: [BGR ColorNibble] -> BoundedArray Word8 (Vector (V4 Word8))
 loadPalette =
-  accumArrayBounded (flip const) mempty . zip [1..3] . fmap fromList . chunksOf 0x10 . fmap fromBGR
+  accumArrayBounded (flip const) mempty . zip [0..3] . fmap fromList . chunksOf 0x10 . fmap fromBGR

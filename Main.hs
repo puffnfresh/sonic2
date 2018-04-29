@@ -12,7 +12,7 @@ import qualified Data.ByteString            as BS
 import           Data.Semigroup             ((<>))
 import           Data.Time                  (diffUTCTime, getCurrentTime)
 import           Game.Sega.Sonic.Blocks
-import           Game.Sega.Sonic.Cells
+import           Game.Sega.Sonic.Tiles
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Error
@@ -238,12 +238,17 @@ renderLevelCollisions renderer paths = do
   layoutContent <- decompressFile $ levelLayoutPath paths
   pure $ loadLayout chunksTextures layoutContent
 
+sonicAndTailsPalettePath :: FilePath
+sonicAndTailsPalettePath =
+  "s2disasm" </> "art" </> "palettes" </> "SonicAndTails.bin"
+
 renderLevelBlocks :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m [[Texture]]
 renderLevelBlocks renderer paths = do
+  maybeSonicPalette <- liftIO $ readPalette <$> BS.readFile sonicAndTailsPalettePath
   maybePalette <- liftIO $ readPalette <$> BS.readFile (levelPalettePath paths)
-  palette <- maybe (throwError . SonicPaletteError $ levelPalettePath paths) (pure . loadPalette) maybePalette
+  palette <- maybe (throwError . SonicPaletteError $ levelPalettePath paths) (pure . loadPalette) (maybeSonicPalette <> maybePalette)
   cellContent <- decompressFile $ levelArtPath paths
-  cellSurfaces <- loadCells cellContent
+  cellSurfaces <- loadTiles cellContent
   blockContent <- decompressFile $ levelBlocksPath paths
   blockTextures <- loadBlocks renderer palette cellSurfaces blockContent
   chunkContent <- decompressFile $ levelChunksPath paths
