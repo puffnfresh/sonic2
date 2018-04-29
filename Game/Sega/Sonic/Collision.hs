@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Game.Sega.Sonic.Collision (
   collisionHeight
 , collisionPixel
@@ -8,14 +11,17 @@ module Game.Sega.Sonic.Collision (
 
 import           Control.Applicative     (liftA2)
 import           Control.Lens            (ix, (^?))
+import           Control.Monad.Except    (MonadError, throwError)
 import           Control.Monad.IO.Class  (MonadIO)
-import           Data.Array              (Array, listArray, (!))
+import           Data.Array.Bounded
 import           Data.Bits               ((.&.))
 import qualified Data.ByteString         as BS
 import           Data.ByteString.Builder (toLazyByteString, word32LE)
 import qualified Data.ByteString.Lazy    as BSL
+import           Data.List.NonEmpty      (NonEmpty (..), nonEmpty)
 import           Data.List.Split         (chunksOf)
-import           Data.Word               (Word32, Word16, Word8)
+import           Data.Word               (Word16, Word32, Word8)
+import           Game.Sega.Sonic.Error   (SonicError (..))
 import           SDL
 
 collisionHeight :: Word8 -> Maybe Word8
@@ -37,17 +43,18 @@ loadCollisionTexture renderer s = do
     height x =
       s ^? ix x >>= collisionHeight
     heights =
-      listArray (0, 0xF :: Word8) $ height <$> [0..]
+      listArrayCycle $ height <$> (0 :| [1..])
     pixel y x =
       word32LE $ collisionPixel (heights ! x) y
     content =
-      foldMap (uncurry pixel) $ liftA2 (,) [0..0xF] [0..0xF]
+      foldMap (uncurry pixel) $ liftA2 (,) [0..0xF] [0..0xF :: Word8]
   updateTexture texture Nothing (BSL.toStrict $ toLazyByteString content) (4 * 0x10)
 
-loadCollisionTextures :: (MonadIO m) => Renderer -> BS.ByteString -> m (Array Word8 Texture)
+loadCollisionTextures :: (MonadIO m) => Renderer -> BS.ByteString -> m (BoundedArray Word8 Texture)
 loadCollisionTextures renderer =
-  fmap (listArray (0, 0xFF)) . traverse (loadCollisionTexture renderer) . chunksOf 0x10 . BS.unpack
+  traverse (loadCollisionTexture renderer) . listArrayFill [] . chunksOf 0x10 . BS.unpack
 
-loadCollisionIndex :: BS.ByteString -> Array Word16 Word8
-loadCollisionIndex =
-  listArray (0, 0x2FF) . BS.unpack
+loadCollisionIndex :: (MonadError SonicError m) => BS.ByteString -> m (BoundedArray Word16 Word8)
+loadCollisionIndex c = do
+  xs <- maybe (throwError SonicEmptyCollisionIndexError) pure . nonEmpty $ BS.unpack c
+  pure $ listArrayCycle xs

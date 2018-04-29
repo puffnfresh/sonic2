@@ -1,14 +1,20 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Game.Sega.Sonic.Chunks (
   loadChunks
 ) where
 
 import           Control.Lens
+import           Control.Monad.Except   (MonadError, throwError)
 import           Control.Monad.IO.Class (MonadIO (..))
-import           Data.Array             (Array, listArray, (!))
+import           Data.Array.Bounded     (BoundedArray, listArrayCycle, (!))
 import           Data.Bits
 import qualified Data.ByteString        as BS
+import           Data.List.NonEmpty     (nonEmpty)
 import           Data.List.Split        (chunksOf)
 import           Data.Word              (Word16, Word8)
+import           Game.Sega.Sonic.Error
 import           SDL
 
 word16s :: [Word8] -> [Word16]
@@ -17,7 +23,7 @@ word16s (a:b:cs) =
 word16s _ =
   []
 
-loadChunk :: (MonadIO m) => Renderer -> Array Word16 Texture -> [[Word8]] -> m Texture
+loadChunk :: (MonadIO m) => Renderer -> BoundedArray Word16 Texture -> [[Word8]] -> m Texture
 loadChunk renderer blocks s = do
   texture <- createTexture renderer ABGR8888 TextureAccessTarget 0x80
   rendererRenderTarget renderer $= Just texture
@@ -33,6 +39,7 @@ loadChunk renderer blocks s = do
       in copyEx renderer (blocks ! (i .&. 0x3FF)) Nothing (Just rectangle) 0 Nothing (V2 flipX flipY)
   pure texture
 
-loadChunks :: (MonadIO m) => Renderer -> Array Word16 Texture -> BS.ByteString -> m (Array Word8 Texture)
-loadChunks renderer blocks =
-  fmap (listArray (0, 0xFF)) . traverse (loadChunk renderer blocks . chunksOf 0x10) . chunksOf 0x80 . BS.unpack
+loadChunks :: (MonadError SonicError m, MonadIO m) => Renderer -> BoundedArray Word16 Texture -> BS.ByteString -> m (BoundedArray Word8 Texture)
+loadChunks renderer blocks c = do
+  xs <- maybe (throwError SonicEmptyChunksError) pure . nonEmpty . chunksOf 0x80 $ BS.unpack c
+  fmap listArrayCycle $ traverse (loadChunk renderer blocks . chunksOf 0x10) xs

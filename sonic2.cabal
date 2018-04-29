@@ -14,6 +14,7 @@ executable sonic2
                      , Game.Sega.Sonic.Cells
                      , Game.Sega.Sonic.Chunks
                      , Game.Sega.Sonic.Collision
+                     , Game.Sega.Sonic.Error
                      , Game.Sega.Sonic.Layout
                      , Game.Sega.Sonic.Palette
   build-depends:       base
@@ -22,10 +23,11 @@ executable sonic2
                      , filepath
                      , mtl
                      , time
+                     , vector
+                     , bounded-array
                      , kosinski
                      , lens
                      , megadrive-palette
                      , sdl2
                      , split
-                     , vector
   default-language:    Haskell2010

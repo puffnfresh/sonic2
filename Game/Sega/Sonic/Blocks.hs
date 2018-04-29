@@ -2,14 +2,12 @@ module Game.Sega.Sonic.Blocks (
   loadBlocks
 ) where
 
-import           Control.Monad          (void)
 import           Control.Monad.IO.Class (MonadIO (..))
-import           Data.Array             (Array, listArray, (!))
+import           Data.Array.Bounded     (BoundedArray, listArrayFill, (!))
 import           Data.Bits
 import qualified Data.ByteString        as BS
 import           Data.Foldable          (for_)
 import           Data.List.Split        (chunksOf)
-import           Data.Semigroup         ((<>))
 import           Data.Vector.Storable   (Vector)
 import           Data.Word              (Word16, Word8)
 import           Foreign.C.Types        (CInt)
@@ -21,7 +19,7 @@ word16s (a:b:cs) =
 word16s _ =
   []
 
-copyCell :: (MonadIO m) => Renderer -> Array Word8 (Vector (V4 Word8)) -> Array Word16 Surface -> Word16 -> V2 CInt -> m ()
+copyCell :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> Word16 -> V2 CInt -> m ()
 copyCell renderer palette cells c v = do
   let
     cellSurface =
@@ -40,7 +38,7 @@ copyCell renderer palette cells c v = do
   copyEx renderer cellTexture Nothing (Just $ Rectangle (P v) 8) 0 Nothing $ V2 flipX flipY
   destroyTexture cellTexture
 
-loadBlock :: (MonadIO m) => Renderer -> Array Word8 (Vector (V4 Word8)) -> Array Word16 Surface -> [Word16] -> m Texture
+loadBlock :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> [Word16] -> m Texture
 loadBlock renderer palette cells c = do
   texture <- createTexture renderer ABGR8888 TextureAccessTarget $ V2 0x10 0x10
   rendererRenderTarget renderer $= Just texture
@@ -56,7 +54,7 @@ emptyTexture renderer = do
   surfaceFillRect surface Nothing (V4 0xFF 0xFF 0x00 0xFF)
   createTextureFromSurface renderer surface
 
-loadBlocks :: (MonadIO m) => Renderer -> Array Word8 (Vector (V4 Word8)) -> Array Word16 Surface -> BS.ByteString -> m (Array Word16 Texture)
+loadBlocks :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> BS.ByteString -> m (BoundedArray Word16 Texture)
 loadBlocks renderer palette cells c = do
   e <- emptyTexture renderer
-  fmap (listArray (0, 0x3FF) . (<> repeat e)) . traverse (loadBlock renderer palette cells) . chunksOf 4 . word16s $ BS.unpack c
+  fmap (listArrayFill e) . traverse (loadBlock renderer palette cells) . chunksOf 4 . word16s $ BS.unpack c

@@ -3,12 +3,11 @@ module Game.Sega.Sonic.Cells (
 ) where
 
 import           Control.Monad.IO.Class (MonadIO (..))
-import           Data.Array             (Array, listArray)
+import           Data.Array.Bounded     (BoundedArray, listArrayFill)
 import           Data.Bits              (shiftR, (.&.))
 import qualified Data.ByteString        as BS
 import           Data.Foldable          (for_)
 import           Data.List.Split        (chunksOf)
-import           Data.Semigroup         ((<>))
 import           Data.Word              (Word16, Word8)
 import           Foreign.Ptr            (Ptr, castPtr)
 import           Foreign.Storable       (pokeElemOff)
@@ -36,7 +35,7 @@ splitByte :: Word8 -> [Word8]
 splitByte a =
   [a `shiftR` 4, a .&. 0xF]
 
-loadCells :: (MonadIO m) => BS.ByteString -> m (Array Word16 Surface)
+loadCells :: (MonadIO m) => BS.ByteString -> m (BoundedArray Word16 Surface)
 loadCells c = do
   e <- emptySurface
-  fmap (listArray (0, 0x7FF) . (<> repeat e)) . traverse (loadCell . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c
+  fmap (listArrayFill e) . traverse (loadCell . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c
