@@ -3,18 +3,18 @@ module Game.Sega.Sonic.Tiles (
 ) where
 
 import           Control.Monad.IO.Class (MonadIO (..))
-import           Data.Array.Bounded     (BoundedArray, listArrayFill)
-import           Data.Bits              (shiftR, (.&.))
+import           Data.Array.Bounded     (BoundedArray, listArrayFill, (!))
+import           Data.Bits              (shiftR, testBit, (.&.))
 import qualified Data.ByteString        as BS
 import           Data.Foldable          (for_)
 import           Data.List.Split        (chunksOf)
 import           Data.Word              (Word16, Word8)
 import           Foreign.Ptr            (Ptr, castPtr)
 import           Foreign.Storable       (pokeElemOff)
-import           SDL
+import           SDL                    hiding (Vector)
 
-loadTile :: (MonadIO m) => [[Word8]] -> m Surface
-loadTile c = do
+tileSurface :: (MonadIO m) => [[Word8]] -> m Surface
+tileSurface c = do
   surface <- createRGBSurface (V2 8 8) Index8
   lockSurface surface
   ptr <- surfacePixels surface
@@ -38,4 +38,4 @@ splitByte a =
 loadTiles :: (MonadIO m) => BS.ByteString -> m (BoundedArray Word16 Surface)
 loadTiles c = do
   e <- emptySurface
-  fmap (listArrayFill e) . traverse (loadTile . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c
+  fmap (listArrayFill e) . traverse (tileSurface . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c

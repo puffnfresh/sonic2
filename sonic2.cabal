@@ -16,6 +16,8 @@ executable sonic2
                      , Game.Sega.Sonic.Error
                      , Game.Sega.Sonic.Layout
                      , Game.Sega.Sonic.Palette
+                     , Game.Sega.Sonic.Sprites
+                     , Game.Sega.Sonic.SpriteMappings
                      , Game.Sega.Sonic.Tiles
   build-depends:       base
                      , array

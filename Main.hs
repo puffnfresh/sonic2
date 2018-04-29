@@ -12,12 +12,14 @@ import qualified Data.ByteString            as BS
 import           Data.Semigroup             ((<>))
 import           Data.Time                  (diffUTCTime, getCurrentTime)
 import           Game.Sega.Sonic.Blocks
-import           Game.Sega.Sonic.Tiles
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Error
 import           Game.Sega.Sonic.Layout
 import           Game.Sega.Sonic.Palette
+import           Game.Sega.Sonic.Tiles
+import           Game.Sega.Sonic.Sprites
+import           Game.Sega.Sonic.SpriteMappings
 import           SDL
 import           Sega.MegaDrive.Palette
 import           System.FilePath.Posix
@@ -258,11 +260,19 @@ renderLevelBlocks renderer paths = do
 
 main :: IO ()
 main = do
-  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 960 672 }
+  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 320 224 }
   renderer <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer $= Just (V2 320 224)
 
-  Right (chunkTextures, collisionTextures) <- runExceptT $ runReaderT (liftA2 (,) (ReaderT $ renderLevelBlocks renderer) (ReaderT $ renderLevelCollisions renderer)) mtz3Paths
+  Right (chunkTextures, collisionTextures) <- runExceptT $ runReaderT (liftA2 (,) (ReaderT $ renderLevelBlocks renderer) (ReaderT $ renderLevelCollisions renderer)) ehz1Paths
+
+  sonicContent <- BS.readFile "s2disasm/art/uncompressed/Sonic's art.bin"
+  sonicSurfaces <- loadTiles sonicContent
+
+  maybeSonicPalette <- liftIO $ readPalette <$> BS.readFile sonicAndTailsPalettePath
+  sonicMappings <- liftIO $ loadMappings <$> BS.readFile "s2disasm/mappings/sprite/Sonic.bin"
+  let Just palette = loadPalette <$> maybeSonicPalette
+  sonicTextures <- traverse (copySpriteMapping renderer palette sonicSurfaces) sonicMappings
 
   rendererRenderTarget renderer $= Nothing
 
@@ -308,6 +318,8 @@ main = do
       clear renderer
       render chunkTextures o' p'
       when c $ render collisionTextures o' p'
+      ifor_ sonicTextures $ \i (SizedTexture w h t) ->
+        copy renderer t Nothing (Just $ Rectangle (P (V2 0 (fromIntegral h * fromIntegral i))) (V2 (fromIntegral w) (fromIntegral h)))
       present renderer
       unless qPressed (appLoop o' p' c')
   appLoop 0 0 False
