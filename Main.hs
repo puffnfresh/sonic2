@@ -2,24 +2,25 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-import qualified Codec.Compression.Kosinski as Kosinski
-import           Control.Applicative        (liftA2)
+import qualified Codec.Compression.Kosinski     as Kosinski
+import           Control.Applicative            (liftA2)
 import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import           Data.Array.Bounded         ((!))
-import qualified Data.ByteString            as BS
-import           Data.Semigroup             ((<>))
-import           Data.Time                  (diffUTCTime, getCurrentTime)
+import           Data.Array.Bounded             ((!))
+import qualified Data.ByteString                as BS
+import           Data.Foldable
+import           Data.Semigroup                 ((<>))
+import           Data.Time                      (diffUTCTime, getCurrentTime)
 import           Game.Sega.Sonic.Blocks
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Error
 import           Game.Sega.Sonic.Layout
 import           Game.Sega.Sonic.Palette
-import           Game.Sega.Sonic.Tiles
-import           Game.Sega.Sonic.Sprites
 import           Game.Sega.Sonic.SpriteMappings
+import           Game.Sega.Sonic.Sprites
+import           Game.Sega.Sonic.Tiles
 import           SDL
 import           Sega.MegaDrive.Palette
 import           System.FilePath.Posix
@@ -249,10 +250,10 @@ renderLevelBlocks renderer paths = do
   maybeSonicPalette <- liftIO $ readPalette <$> BS.readFile sonicAndTailsPalettePath
   maybePalette <- liftIO $ readPalette <$> BS.readFile (levelPalettePath paths)
   palette <- maybe (throwError . SonicPaletteError $ levelPalettePath paths) (pure . loadPalette) (maybeSonicPalette <> maybePalette)
-  cellContent <- decompressFile $ levelArtPath paths
-  cellSurfaces <- loadTiles cellContent
+  tileContent <- decompressFile $ levelArtPath paths
+  tileSurfaces <- loadTiles tileContent
   blockContent <- decompressFile $ levelBlocksPath paths
-  blockTextures <- loadBlocks renderer palette cellSurfaces blockContent
+  blockTextures <- loadBlocks renderer palette tileSurfaces blockContent
   chunkContent <- decompressFile $ levelChunksPath paths
   chunkTextures <- loadChunks renderer blockTextures chunkContent
   layoutContent <- decompressFile $ levelLayoutPath paths
@@ -268,11 +269,17 @@ main = do
 
   sonicContent <- BS.readFile "s2disasm/art/uncompressed/Sonic's art.bin"
   sonicSurfaces <- loadTiles sonicContent
-
   maybeSonicPalette <- liftIO $ readPalette <$> BS.readFile sonicAndTailsPalettePath
   sonicMappings <- liftIO $ loadMappings <$> BS.readFile "s2disasm/mappings/sprite/Sonic.bin"
-  let Just palette = loadPalette <$> maybeSonicPalette
-  sonicTextures <- traverse (copySpriteMapping renderer palette sonicSurfaces) sonicMappings
+  sonicDPLC <- liftIO $ loadDynamicPatternLoadCues <$> BS.readFile "s2disasm/mappings/spriteDPLC/Sonic.bin"
+
+  let
+    Just palette =
+      loadPalette <$> maybeSonicPalette
+    f (SpriteFrame s) (DynamicPatternLoadCueFrame dplcs) = do
+      sonicSurfaces' <- applyDynamicPatternLoadCue sonicSurfaces dplcs
+      traverse (copySpriteMapping renderer palette sonicSurfaces') s
+  sonicTextures <- traverse (uncurry f) $ zip sonicMappings sonicDPLC
 
   rendererRenderTarget renderer $= Nothing
 
@@ -318,8 +325,10 @@ main = do
       clear renderer
       render chunkTextures o' p'
       when c $ render collisionTextures o' p'
-      ifor_ sonicTextures $ \i (SizedTexture w h t) ->
-        copy renderer t Nothing (Just $ Rectangle (P (V2 0 (fromIntegral h * fromIntegral i))) (V2 (fromIntegral w) (fromIntegral h)))
+      ifor_ sonicTextures $ \x ts ->
+        let x' = fromIntegral x * 64 - o'
+        in for_ ts $ \(SpriteMapping l t w h e) ->
+          copy renderer e Nothing (Just $ Rectangle (P (V2 (fromIntegral l + x') ((fromIntegral t + 640) - p'))) (V2 (fromIntegral w) (fromIntegral h)))
       present renderer
       unless qPressed (appLoop o' p' c')
   appLoop 0 0 False

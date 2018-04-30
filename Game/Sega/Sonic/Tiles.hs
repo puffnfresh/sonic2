@@ -1,17 +1,20 @@
 module Game.Sega.Sonic.Tiles (
   loadTiles
+, applyDynamicPatternLoadCue
 ) where
 
-import           Control.Monad.IO.Class (MonadIO (..))
-import           Data.Array.Bounded     (BoundedArray, listArrayFill, (!))
-import           Data.Bits              (shiftR, testBit, (.&.))
-import qualified Data.ByteString        as BS
-import           Data.Foldable          (for_)
-import           Data.List.Split        (chunksOf)
-import           Data.Word              (Word16, Word8)
-import           Foreign.Ptr            (Ptr, castPtr)
-import           Foreign.Storable       (pokeElemOff)
-import           SDL                    hiding (Vector)
+import           Control.Monad.IO.Class         (MonadIO (..))
+import           Data.Array.Bounded             (BoundedArray, listArrayFill,
+                                                 (!))
+import           Data.Bits                      (shiftR, (.&.))
+import qualified Data.ByteString                as BS
+import           Data.Foldable                  (for_)
+import           Data.List.Split                (chunksOf)
+import           Data.Word                      (Word16, Word8)
+import           Foreign.Ptr                    (Ptr, castPtr)
+import           Foreign.Storable               (pokeElemOff)
+import           Game.Sega.Sonic.SpriteMappings (DynamicPatternLoadCue (..))
+import           SDL                            hiding (Vector)
 
 tileSurface :: (MonadIO m) => [[Word8]] -> m Surface
 tileSurface c = do
@@ -39,3 +42,11 @@ loadTiles :: (MonadIO m) => BS.ByteString -> m (BoundedArray Word16 Surface)
 loadTiles c = do
   e <- emptySurface
   fmap (listArrayFill e) . traverse (tileSurface . chunksOf 8) . chunksOf 0x40 $ splitByte =<< BS.unpack c
+
+applyDynamicPatternLoadCue :: (MonadIO m) => BoundedArray Word16 Surface -> [DynamicPatternLoadCue] -> m (BoundedArray Word16 Surface)
+applyDynamicPatternLoadCue tiles dplcs = do
+  e <- emptySurface
+  pure . listArrayFill e $ dplcs >>= fmap (tiles !) . is
+  where
+    is (DynamicPatternLoadCue s i) =
+      [i..i + fromIntegral s]

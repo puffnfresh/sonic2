@@ -27,6 +27,7 @@ executable sonic2
                      , time
                      , vector
                      , bounded-array
+                     , halves
                      , kosinski
                      , lens
                      , megadrive-palette

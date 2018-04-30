@@ -19,13 +19,13 @@ word16s _ =
   []
 
 loadBlock :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> [Word16] -> m Texture
-loadBlock renderer palette cells c = do
+loadBlock renderer palette tiles c = do
   texture <- createTexture renderer ABGR8888 TextureAccessTarget $ V2 0x10 0x10
   rendererRenderTarget renderer $= Just texture
-  copySpriteTile renderer palette cells (c !! 0) $ V2 0 0
-  copySpriteTile renderer palette cells (c !! 1) $ V2 8 0
-  copySpriteTile renderer palette cells (c !! 2) $ V2 0 8
-  copySpriteTile renderer palette cells (c !! 3) $ V2 8 8
+  copySpriteTile renderer palette tiles (c !! 0) $ V2 0 0
+  copySpriteTile renderer palette tiles (c !! 1) $ V2 8 0
+  copySpriteTile renderer palette tiles (c !! 2) $ V2 0 8
+  copySpriteTile renderer palette tiles (c !! 3) $ V2 8 8
   pure texture
 
 emptyTexture :: (MonadIO m) => Renderer -> m Texture
@@ -35,6 +35,6 @@ emptyTexture renderer = do
   createTextureFromSurface renderer surface
 
 loadBlocks :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> BS.ByteString -> m (BoundedArray Word16 Texture)
-loadBlocks renderer palette cells c = do
+loadBlocks renderer palette tiles c = do
   e <- emptyTexture renderer
-  fmap (listArrayFill e) . traverse (loadBlock renderer palette cells) . chunksOf 4 . word16s $ BS.unpack c
+  fmap (listArrayFill e) . traverse (loadBlock renderer palette tiles) . chunksOf 4 . word16s $ BS.unpack c
