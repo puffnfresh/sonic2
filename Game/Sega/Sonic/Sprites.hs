@@ -44,6 +44,7 @@ copySpriteMapping renderer palette tiles (SpriteMapping top left width height (P
       8 * (height + 1)
   texture <- createTexture renderer ABGR8888 TextureAccessTarget $ V2 (fromIntegral width') (fromIntegral height')
   rendererRenderTarget renderer $= Just texture
+  textureBlendMode texture $= BlendAlphaBlend
   ifor_ (liftA2 (,) [0..width] [0..height]) $ \i (x, y) ->
     let
       patternIndex' =
