@@ -1,6 +1,7 @@
 module Game.Sega.Sonic.Offsets where
 
-import           Data.Word (Word32)
+import qualified Data.ByteString as BS
+import           Data.Word       (Word32)
 
 data Offset
   = Offset Word32 Word32
@@ -89,3 +90,10 @@ data LevelOffsets
 ehz1 :: LevelOffsets
 ehz1 =
   LevelOffsets layoutEhz1 chunkEhzHtz blockEhz collisionEhzHtzPrimary paletteEhz artEhzHtz
+
+sliceOffset :: Offset -> BS.ByteString -> BS.ByteString
+sliceOffset (Offset start end) =
+  BS.take (fromIntegral count) . BS.drop (fromIntegral start)
+  where
+    count =
+      end - start

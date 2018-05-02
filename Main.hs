@@ -7,16 +7,19 @@ import           Control.Applicative            (liftA2)
 import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import           Data.Array.Bounded
 import           Data.Array.Bounded             ((!))
 import qualified Data.ByteString                as BS
 import           Data.Foldable
 import           Data.Semigroup                 ((<>))
 import           Data.Time                      (diffUTCTime, getCurrentTime)
+import           Game.Sega.Sonic.Animation
 import           Game.Sega.Sonic.Blocks
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Error
 import           Game.Sega.Sonic.Layout
+import           Game.Sega.Sonic.Offsets
 import           Game.Sega.Sonic.Palette
 import           Game.Sega.Sonic.SpriteMappings
 import           Game.Sega.Sonic.Sprites
@@ -261,7 +264,14 @@ renderLevelBlocks renderer paths = do
 
 main :: IO ()
 main = do
-  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 320 224 }
+  sonic2 <- BS.readFile "sonic2.md"
+  let
+    AnimationScript frameRate animationSteps =
+      loadAnimation . BS.unpack $ sliceOffset animationSonicWait sonic2
+    animationSteps' =
+      listArrayFill AnimationReset $ animationSteps
+
+  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = (V2 320 224) * 4 }
   renderer <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer $= Just (V2 320 224)
 
@@ -291,7 +301,8 @@ main = do
             rectangle =
               Rectangle (P (V2 ((fromIntegral x * 0x80) - o) ((fromIntegral y * 0x80) - p))) 0x80
           in copy renderer texture Nothing (Just rectangle)
-    appLoop o p c = do
+    appLoop o p (n, m) c = do
+      startTicks <- ticks
       events <- pollEvents
       let
         eventIsPress keycode event =
@@ -321,14 +332,23 @@ main = do
           p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
         c' =
           (if cPressed then not else id) c
+        (n', m') =
+          case animationSteps' ! n of
+            AnimationFrame m' -> (n + 1, m')
+            AnimationJumpBack j -> (n - j, m)
+            _ -> (n + 1, m)
+        renderSprite x ts =
+          for_ ts $ \(SpriteMapping l t w h e) ->
+            copy renderer e Nothing (Just $ Rectangle (P (V2 (fromIntegral l + x) ((fromIntegral t + 655) - p'))) (V2 (fromIntegral w) (fromIntegral h)))
       rendererDrawColor renderer $= V4 0 0 0 0xFF
       clear renderer
       render chunkTextures o' p'
       when c $ render collisionTextures o' p'
-      ifor_ sonicTextures $ \x ts ->
-        let x' = fromIntegral x * 64 - o'
-        in for_ ts $ \(SpriteMapping l t w h e) ->
-          copy renderer e Nothing (Just $ Rectangle (P (V2 (fromIntegral l + x') ((fromIntegral t + 640) - p'))) (V2 (fromIntegral w) (fromIntegral h)))
+      renderSprite (100 - o') (sonicTextures !! fromIntegral m')
       present renderer
-      unless qPressed (appLoop o' p' c')
-  appLoop 0 0 False
+      endTicks <- ticks
+      let d = (floor $ ((1000.0 / fromIntegral frameRate :: Double) - (fromIntegral endTicks - fromIntegral startTicks)))
+      print d
+      delay d
+      unless qPressed (appLoop o' p' (n', m') c')
+  appLoop 0 0 (0, 0) False

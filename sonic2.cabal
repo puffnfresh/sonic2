@@ -10,14 +10,16 @@ cabal-version:       >=1.10
 
 executable sonic2
   main-is:             Main.hs
-  other-modules:       Game.Sega.Sonic.Blocks
+  other-modules:       Game.Sega.Sonic.Animation
+                     , Game.Sega.Sonic.Blocks
                      , Game.Sega.Sonic.Chunks
                      , Game.Sega.Sonic.Collision
                      , Game.Sega.Sonic.Error
                      , Game.Sega.Sonic.Layout
+                     , Game.Sega.Sonic.Offsets
                      , Game.Sega.Sonic.Palette
-                     , Game.Sega.Sonic.Sprites
                      , Game.Sega.Sonic.SpriteMappings
+                     , Game.Sega.Sonic.Sprites
                      , Game.Sega.Sonic.Tiles
   build-depends:       base
                      , array
