@@ -5,6 +5,7 @@ import           Data.Word       (Word32)
 
 data Offset
   = Offset Word32 Word32
+  deriving (Eq, Ord, Show)
 
 paletteSonic :: Offset
 paletteSonic =
@@ -44,23 +45,23 @@ animationSonicWalk =
 
 animationSonicRun :: Offset
 animationSonicRun =
-  Offset 0x1B672 0x1B67C
+  Offset 0x1B666 0x1B670
 
 animationSonicRoll :: Offset
 animationSonicRoll =
-  Offset 0x1B67C 0x1B686
+  Offset 0x1B670 0x1B67A
 
 animationSonicRoll2 :: Offset
 animationSonicRoll2 =
-  Offset 0x1B686 0x1B690
+  Offset 0x1B67A 0x1B684
 
 animationSonicPush :: Offset
 animationSonicPush =
-  Offset 0x1B690 0x1B69A
+  Offset 0x1B684 0x1B68E
 
 animationSonicWait :: Offset
 animationSonicWait =
-  Offset 0x1B69A 0x1B750
+  Offset 0x1B68E 0x1B744
 
 dplcSonic :: Offset
 dplcSonic =
@@ -86,6 +87,7 @@ data LevelOffsets
                  , levelPaletteOffset   :: Offset
                  , levelArtOffset       :: Offset
                  }
+  deriving (Eq, Ord, Show)
 
 ehz1 :: LevelOffsets
 ehz1 =

@@ -26,248 +26,53 @@ import           Game.Sega.Sonic.Sprites
 import           Game.Sega.Sonic.Tiles
 import           SDL
 import           Sega.MegaDrive.Palette
-import           System.FilePath.Posix
 
-data LevelPaths
-  = LevelPaths { levelLayoutPath    :: FilePath
-               , levelChunksPath    :: FilePath
-               , levelBlocksPath    :: FilePath
-               , levelCollisionPath :: FilePath
-               , levelPalettePath   :: FilePath
-               , levelArtPath       :: FilePath
-               }
+decompressFile :: (MonadReader BS.ByteString m, MonadError SonicError m, MonadIO m) => Offset -> m BS.ByteString
+decompressFile offset = do
+  maybeContent <- asks $ Kosinski.compressed . sliceOffset offset
+  content <- maybe (throwError $ SonicLoadError offset) pure maybeContent
+  maybe (throwError $ SonicDecompressionError offset) pure $ Kosinski.decompress content
 
-ehz1Paths :: LevelPaths
-ehz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "EHZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "EHZ_HTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "EHZ.bin")
-             ("s2disasm" </> "collision" </> "EHZ and HTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "EHZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "EHZ_HTZ.bin")
-
-ehz2Paths :: LevelPaths
-ehz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "EHZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "EHZ_HTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "EHZ.bin")
-             ("s2disasm" </> "collision" </> "EHZ and HTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "EHZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "EHZ_HTZ.bin")
-
-cpz1Paths :: LevelPaths
-cpz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "CPZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "CPZ_DEZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "CPZ_DEZ.bin")
-             ("s2disasm" </> "collision" </> "CPZ and DEZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "CPZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "CPZ_DEZ.bin")
-
-cpz2Paths :: LevelPaths
-cpz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "CPZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "CPZ_DEZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "CPZ_DEZ.bin")
-             ("s2disasm" </> "collision" </> "CPZ and DEZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "CPZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "CPZ_DEZ.bin")
-
-arz1Paths :: LevelPaths
-arz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "ARZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "ARZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "ARZ.bin")
-             ("s2disasm" </> "collision" </> "ARZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "ARZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "ARZ.bin")
-
-
-arz2Paths :: LevelPaths
-arz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "ARZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "ARZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "ARZ.bin")
-             ("s2disasm" </> "collision" </> "ARZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "ARZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "ARZ.bin")
-
-cnz1Paths :: LevelPaths
-cnz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "CNZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "CNZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "CNZ.bin")
-             ("s2disasm" </> "collision" </> "CNZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "CNZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "CNZ.bin")
-
-cnz2Paths :: LevelPaths
-cnz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "CNZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "CNZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "CNZ.bin")
-             ("s2disasm" </> "collision" </> "CNZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "CNZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "CNZ.bin")
-
-htz1Paths :: LevelPaths
-htz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "HTZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "EHZ_HTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "HTZ.bin")
-             ("s2disasm" </> "collision" </> "EHZ and HTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "HTZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "EHZ_HTZ.bin")
-
-htz2Paths :: LevelPaths
-htz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "HTZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "EHZ_HTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "HTZ.bin")
-             ("s2disasm" </> "collision" </> "EHZ and HTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "HTZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "EHZ_HTZ.bin")
-
-mcz1Paths :: LevelPaths
-mcz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "MCZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "MCZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "MCZ.bin")
-             ("s2disasm" </> "collision" </> "MCZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "MCZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "MCZ.bin")
-
-mcz2Paths :: LevelPaths
-mcz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "MCZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "MCZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "MCZ.bin")
-             ("s2disasm" </> "collision" </> "MCZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "MCZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "MCZ.bin")
-
-ooz1Paths :: LevelPaths
-ooz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "OOZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "OOZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "OOZ.bin")
-             ("s2disasm" </> "collision" </> "OOZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "OOZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "OOZ.bin")
-
-ooz2Paths :: LevelPaths
-ooz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "OOZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "OOZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "OOZ.bin")
-             ("s2disasm" </> "collision" </> "OOZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "OOZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "OOZ.bin")
-
-mtz1Paths :: LevelPaths
-mtz1Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "MTZ_1.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "MTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "MTZ.bin")
-             ("s2disasm" </> "collision" </> "MTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "MTZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "MTZ.bin")
-
-mtz2Paths :: LevelPaths
-mtz2Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "MTZ_2.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "MTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "MTZ.bin")
-             ("s2disasm" </> "collision" </> "MTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "MTZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "MTZ.bin")
-
-mtz3Paths :: LevelPaths
-mtz3Paths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "MTZ_3.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "MTZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "MTZ.bin")
-             ("s2disasm" </> "collision" </> "MTZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "MTZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "MTZ.bin")
-
-sczPaths :: LevelPaths
-sczPaths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "SCZ.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "WFZ_SCZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "WFZ_SCZ.bin")
-             ("s2disasm" </> "collision" </> "WFZ and SCZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "SCZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "WFZ_SCZ.bin")
-
-wfzPaths :: LevelPaths
-wfzPaths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "WFZ.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "WFZ_SCZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "WFZ_SCZ.bin")
-             ("s2disasm" </> "collision" </> "WFZ and SCZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "WFZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "WFZ_SCZ.bin")
-
-dezPaths :: LevelPaths
-dezPaths =
-  LevelPaths ("s2disasm" </> "level" </> "layout" </> "DEZ.bin")
-             ("s2disasm" </> "mappings" </> "128x128" </> "CPZ_DEZ.bin")
-             ("s2disasm" </> "mappings" </> "16x16" </> "CPZ_DEZ.bin")
-             ("s2disasm" </> "collision" </> "CPZ and DEZ primary 16x16 collision index.bin")
-             ("s2disasm" </> "art" </> "palettes" </> "DEZ.bin")
-             ("s2disasm" </> "art" </> "kosinski" </> "CPZ_DEZ.bin")
-
-decompressFile :: (MonadError SonicError m, MonadIO m) => FilePath -> m BS.ByteString
-decompressFile path = do
-  maybeContent <- liftIO $ Kosinski.compressedFile path
-  content <- maybe (throwError $ SonicLoadError path) pure maybeContent
-  maybe (throwError $ SonicDecompressionError path) pure $ Kosinski.decompress content
-
-renderLevelCollisions :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m [[Texture]]
-renderLevelCollisions renderer paths = do
-  collisionIndexContent <- decompressFile $ levelCollisionPath paths
+renderLevelCollisions :: (MonadReader BS.ByteString m, MonadError SonicError m, MonadIO m) => Renderer -> LevelOffsets -> m [[Texture]]
+renderLevelCollisions renderer offsets = do
+  collisionIndexContent <- decompressFile $ levelCollisionOffset offsets
   collisionIndex <- loadCollisionIndex collisionIndexContent
 
-  collisionContent <- liftIO $ BS.readFile ("s2disasm" </> "collision" </> "Collision array 1.bin")
+  collisionContent <- asks $ sliceOffset collisionArray1
   collisionTextures <- liftIO $ loadCollisionTextures renderer collisionContent
 
   let reindexedCollisionTextures = (collisionTextures !) <$> collisionIndex
 
   now <- liftIO getCurrentTime
-  chunksContent <- decompressFile $ levelChunksPath paths
+  chunksContent <- decompressFile $ levelChunksOffset offsets
   liftIO $ putStrLn "Loading chunks..."
   chunksTextures <- loadChunks renderer reindexedCollisionTextures chunksContent
   now' <- liftIO getCurrentTime
   liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
 
-  layoutContent <- decompressFile $ levelLayoutPath paths
+  layoutContent <- decompressFile $ levelLayoutOffset offsets
   pure $ loadLayout chunksTextures layoutContent
 
-sonicAndTailsPalettePath :: FilePath
-sonicAndTailsPalettePath =
-  "s2disasm" </> "art" </> "palettes" </> "SonicAndTails.bin"
-
-renderLevelBlocks :: (MonadError SonicError m, MonadIO m) => Renderer -> LevelPaths -> m [[Texture]]
-renderLevelBlocks renderer paths = do
-  maybeSonicPalette <- liftIO $ readPalette <$> BS.readFile sonicAndTailsPalettePath
-  maybePalette <- liftIO $ readPalette <$> BS.readFile (levelPalettePath paths)
-  palette <- maybe (throwError . SonicPaletteError $ levelPalettePath paths) (pure . loadPalette) (maybeSonicPalette <> maybePalette)
-  tileContent <- decompressFile $ levelArtPath paths
+renderLevelBlocks :: (MonadReader BS.ByteString m, MonadError SonicError m, MonadIO m) => Renderer -> LevelOffsets -> m [[Texture]]
+renderLevelBlocks renderer offsets = do
+  maybeSonicPalette <- asks $ readPalette . sliceOffset paletteSonic
+  maybePalette <- asks $ readPalette . sliceOffset (levelPaletteOffset offsets)
+  palette <- maybe (throwError . SonicPaletteError $ levelPaletteOffset offsets) (pure . loadPalette) (maybeSonicPalette <> maybePalette)
+  tileContent <- decompressFile $ levelArtOffset offsets
   tileSurfaces <- loadTiles tileContent
-  blockContent <- decompressFile $ levelBlocksPath paths
+  blockContent <- decompressFile $ levelBlocksOffset offsets
   blockTextures <- loadBlocks renderer palette tileSurfaces blockContent
-  chunkContent <- decompressFile $ levelChunksPath paths
+  chunkContent <- decompressFile $ levelChunksOffset offsets
   chunkTextures <- loadChunks renderer blockTextures chunkContent
-  layoutContent <- decompressFile $ levelLayoutPath paths
+  layoutContent <- decompressFile $ levelLayoutOffset offsets
   pure $ loadLayout chunkTextures layoutContent
 
 main :: IO ()
 main = do
-  sonic2 <- BS.readFile "sonic2.md"
+  rom <- BS.readFile "sonic2.md"
   let
     AnimationScript frameRate animationSteps =
-      loadAnimation . BS.unpack $ sliceOffset animationSonicWait sonic2
+      loadAnimation . BS.unpack $ sliceOffset animationSonicWait rom
     animationSteps' =
       listArrayFill AnimationReset $ animationSteps
 
@@ -275,13 +80,14 @@ main = do
   renderer <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer $= Just (V2 320 224)
 
-  Right (chunkTextures, collisionTextures) <- runExceptT $ runReaderT (liftA2 (,) (ReaderT $ renderLevelBlocks renderer) (ReaderT $ renderLevelCollisions renderer)) ehz1Paths
+  Right chunkTextures <- runExceptT $ runReaderT (renderLevelBlocks renderer ehz1) rom
+  Right collisionTextures <- runExceptT $ runReaderT (renderLevelCollisions renderer ehz1) rom
 
-  sonicContent <- BS.readFile "s2disasm/art/uncompressed/Sonic's art.bin"
+  let sonicContent = sliceOffset artSonic rom
+      sonicMappings = loadMappings $ sliceOffset mappingSonic rom
+      maybeSonicPalette = readPalette $ sliceOffset paletteSonic rom
+      sonicDPLC = loadDynamicPatternLoadCues $ sliceOffset dplcSonic rom
   sonicSurfaces <- loadTiles sonicContent
-  maybeSonicPalette <- liftIO $ readPalette <$> BS.readFile sonicAndTailsPalettePath
-  sonicMappings <- liftIO $ loadMappings <$> BS.readFile "s2disasm/mappings/sprite/Sonic.bin"
-  sonicDPLC <- liftIO $ loadDynamicPatternLoadCues <$> BS.readFile "s2disasm/mappings/spriteDPLC/Sonic.bin"
 
   let
     Just palette =
@@ -334,9 +140,9 @@ main = do
           (if cPressed then not else id) c
         (n', m') =
           case animationSteps' ! n of
-            AnimationFrame m' -> (n + 1, m')
+            AnimationFrame m''  -> (n + 1, m'')
             AnimationJumpBack j -> (n - j, m)
-            _ -> (n + 1, m)
+            _                   -> (n + 1, m)
         renderSprite x ts =
           for_ ts $ \(SpriteMapping l t w h e) ->
             copy renderer e Nothing (Just $ Rectangle (P (V2 (fromIntegral l + x) ((fromIntegral t + 655) - p'))) (V2 (fromIntegral w) (fromIntegral h)))
