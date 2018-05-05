@@ -67,16 +67,28 @@ renderLevelBlocks renderer offsets = do
   layoutContent <- decompressFile $ levelLayoutOffset offsets
   pure $ loadLayout chunkTextures layoutContent
 
+limitFrameRate :: Double -> IO a -> IO a
+limitFrameRate frameRate action = do
+  startTicks <- ticks
+  a <- action
+  endTicks <- ticks
+  let difference = fromIntegral endTicks - fromIntegral startTicks
+  delay (floor $ ((1000.0 / frameRate) - difference))
+  pure a
+
 main :: IO ()
 main = do
   rom <- BS.readFile "sonic2.md"
   let
-    AnimationScript frameRate animationSteps =
+    AnimationScript _ animationSteps =
       loadAnimation . BS.unpack $ sliceOffset animationSonicWait rom
     animationSteps' =
       listArrayFill AnimationReset $ animationSteps
+    -- NTSC vs PAL
+    frameRate =
+      29.97
 
-  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = (V2 320 224) * 4 }
+  window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 320 224 }
   renderer <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer $= Just (V2 320 224)
 
@@ -107,8 +119,7 @@ main = do
             rectangle =
               Rectangle (P (V2 ((fromIntegral x * 0x80) - o) ((fromIntegral y * 0x80) - p))) 0x80
           in copy renderer texture Nothing (Just rectangle)
-    appLoop o p (n, m) c = do
-      startTicks <- ticks
+    appLoop o p (n, m) c = limitFrameRate frameRate $ do
       events <- pollEvents
       let
         eventIsPress keycode event =
@@ -152,9 +163,5 @@ main = do
       when c $ render collisionTextures o' p'
       renderSprite (100 - o') (sonicTextures !! fromIntegral m')
       present renderer
-      endTicks <- ticks
-      let d = (floor $ ((1000.0 / fromIntegral frameRate :: Double) - (fromIntegral endTicks - fromIntegral startTicks)))
-      print d
-      delay d
       unless qPressed (appLoop o' p' (n', m') c')
   appLoop 0 0 (0, 0) False
