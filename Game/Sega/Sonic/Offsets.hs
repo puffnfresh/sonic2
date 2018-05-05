@@ -35,9 +35,17 @@ artSonic :: Offset
 artSonic =
   Offset 0x50000 0x64320
 
+artTails :: Offset
+artTails =
+  Offset 0x64320 0x6FBE0
+
 mappingSonic :: Offset
 mappingSonic =
   Offset 0x6FBE0 0x714E0
+
+mappingTails :: Offset
+mappingTails =
+  Offset 0x739E2 0x7446C
 
 animationSonicWalk :: Offset
 animationSonicWalk =
@@ -63,9 +71,17 @@ animationSonicWait :: Offset
 animationSonicWait =
   Offset 0x1B68E 0x1B744
 
+animationTailsWait :: Offset
+animationTailsWait =
+  Offset 0x1D0A2 0x1D0E0
+
 dplcSonic :: Offset
 dplcSonic =
   Offset 0x714E0 0x71D8E
+
+dplcTails :: Offset
+dplcTails =
+  Offset 0x7446C 0x74876
 
 blockEhz :: Offset
 blockEhz =

@@ -31,19 +31,24 @@ import           Game.Sega.Sonic.SpriteMappings (PatternIndex (..),
 import           SDL                            hiding (Vector)
 
 data AnimationState
-  = AnimationState Word8 Word8
+  = AnimationState Word8 Word8 Word8
   deriving (Eq, Ord, Show)
 
 emptyAnimationState :: AnimationState
 emptyAnimationState =
-  AnimationState 0 0
+  AnimationState 0 0 0
 
 stepAnimation :: AnimationScript -> AnimationState -> AnimationState
-stepAnimation (AnimationScript _ steps) (AnimationState stepIndex spriteIndex) =
-  case steps ! stepIndex of
-    AnimationFrame spriteIndex'  -> AnimationState (stepIndex + 1) spriteIndex'
-    AnimationJumpBack j -> AnimationState (stepIndex - j) spriteIndex
-    _                   -> AnimationState (stepIndex + 1) spriteIndex
+stepAnimation (AnimationScript spriteDelay steps) (AnimationState stepIndex spriteIndex spriteCount) =
+  if spriteCount >= spriteDelay
+  then state'
+  else AnimationState stepIndex spriteIndex (spriteCount + 1)
+  where
+    state' =
+      case steps ! stepIndex of
+        AnimationFrame spriteIndex'  -> AnimationState (stepIndex + 1) spriteIndex' 0
+        AnimationJumpBack j -> AnimationState (stepIndex - j) spriteIndex 0
+        _                   -> AnimationState (stepIndex + 1) spriteIndex 0
 
 data Sprite
   = Sprite [[SpriteMapping Texture]] (V2 CInt) AnimationScript AnimationState
@@ -71,7 +76,7 @@ spriteAnimationState =
       Sprite a b c d
 
 renderSprite :: (MonadReader Game m, MonadIO m) => Sprite -> m ()
-renderSprite (Sprite mappings (V2 x y) _ (AnimationState _ m)) = do
+renderSprite (Sprite mappings (V2 x y) _ (AnimationState _ m _)) = do
   r <- view gameRenderer
   o <- view (gameCamera . cameraX)
   p <- view (gameCamera . cameraY)

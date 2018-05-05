@@ -68,34 +68,33 @@ renderLevelBlocks renderer offsets = do
   layoutContent <- decompressFile $ levelLayoutOffset offsets
   pure $ loadLayout chunkTextures layoutContent
 
-limitFrameRate :: Double -> (IO () -> IO a) -> IO a
-limitFrameRate frameRate f = do
-  startTicks <- ticks
-  f $ do
-    endTicks <- ticks
-    let difference = fromIntegral endTicks - fromIntegral startTicks
-    delay (floor $ ((1000.0 / frameRate) - difference))
+-- NTSC
+frameRate :: Double
+frameRate =
+  29.97
 
 main :: IO ()
 main = do
   rom <- BS.readFile "sonic2.md"
   let
-    -- NTSC
-    frameRate =
-      29.97
 
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 320 224 }
   renderer <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer $= Just (V2 320 224)
 
   Right chunkTextures <- runExceptT $ runReaderT (renderLevelBlocks renderer ehz1) rom
-  Right collisionTextures <- runExceptT $ runReaderT (renderLevelCollisions renderer ehz1) rom
+  -- Right collisionTextures <- runExceptT $ runReaderT (renderLevelCollisions renderer ehz1) rom
 
   let sonicContent = sliceOffset artSonic rom
       sonicMappings = loadMappings $ sliceOffset mappingSonic rom
       maybeSonicPalette = readPalette $ sliceOffset paletteSonic rom
       sonicDPLC = loadDynamicPatternLoadCues $ sliceOffset dplcSonic rom
   sonicSurfaces <- loadTiles sonicContent
+
+  let tailsContent = sliceOffset artTails rom
+      tailsMappings = loadMappings $ sliceOffset mappingTails rom
+      tailsDPLC = loadDynamicPatternLoadCues $ sliceOffset dplcTails rom
+  tailsSurfaces <- loadTiles tailsContent
 
   let
     Just palette =
@@ -105,13 +104,23 @@ main = do
       traverse (copySpriteMapping renderer palette sonicSurfaces') s
   sonicTextures <- traverse (uncurry f) $ zip sonicMappings sonicDPLC
 
+  let
+    g (SpriteFrame s) (DynamicPatternLoadCueFrame dplcs) = do
+      tailsSurfaces' <- applyDynamicPatternLoadCue tailsSurfaces dplcs
+      traverse (copySpriteMapping renderer palette tailsSurfaces') s
+  tailsTextures <- traverse (uncurry g) $ zip tailsMappings tailsDPLC
+
   rendererRenderTarget renderer $= Nothing
 
   let
-    animationScript =
+    sonicAnimationScript =
       loadAnimation . BS.unpack $ sliceOffset animationSonicWait rom
+    tailsAnimationScript =
+      loadAnimation . BS.unpack $ sliceOffset animationTailsWait rom
     sonic =
-      Sprite sonicTextures (V2 0 0) animationScript emptyAnimationState
+      Sprite sonicTextures (V2 100 660) sonicAnimationScript emptyAnimationState
+    tails =
+      Sprite tailsTextures (V2 50 660) tailsAnimationScript emptyAnimationState
     render textures o p =
       ifor_ textures $ \y row ->
         ifor_ row $ \x texture ->
@@ -119,7 +128,8 @@ main = do
             rectangle =
               Rectangle (P (V2 ((fromIntegral x * 0x80) - o) ((fromIntegral y * 0x80) - p))) 0x80
           in copy renderer texture Nothing (Just rectangle)
-    appLoop sonic' game = limitFrameRate frameRate $ \waitForFrameRate -> do
+    appLoop sonic' tails' game = do
+      -- startTicks <- ticks
       events <- pollEvents
       let
         eventIsPress keycode event =
@@ -151,11 +161,15 @@ main = do
           Game renderer (V2 o' p')
         sonic'' =
           stepSprite sonic'
+        tails'' =
+          stepSprite tails'
       rendererDrawColor renderer $= V4 0 0 0 0xFF
       clear renderer
       render chunkTextures o' p'
-      runReaderT (renderSprite sonic') game'
+      runReaderT (renderSprite sonic' *> renderSprite tails') game'
       present renderer
-      waitForFrameRate
-      unless qPressed (appLoop sonic'' game')
-  appLoop sonic (Game renderer 0)
+      -- endTicks <- ticks
+      -- let difference = fromIntegral endTicks - fromIntegral startTicks
+      delay 31
+      unless qPressed (appLoop sonic'' tails'' game')
+  appLoop sonic tails (Game renderer 0)
