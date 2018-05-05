@@ -1,20 +1,82 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Game.Sega.Sonic.Sprites (
   copySpriteTile
 , copySpriteMapping
+, AnimationState(..)
+, emptyAnimationState
+, stepAnimation
+, Sprite(..)
+, stepSprite
+, spriteAnimationState
+, renderSprite
 ) where
 
 import           Control.Applicative            (liftA2)
-import           Control.Lens                   (ifor_)
+import           Control.Lens
 import           Control.Monad.IO.Class         (MonadIO (..))
+import           Control.Monad.Reader           (MonadReader)
 import           Data.Array.Bounded
 import           Data.Bits                      (shiftR, testBit, (.&.))
 import           Data.Foldable                  (for_)
 import           Data.Vector.Storable           (Vector)
 import           Data.Word                      (Word16, Word8)
 import           Foreign.C.Types                (CInt)
+import           Game.Sega.Sonic.Animation      (AnimationScript (..),
+                                                 AnimationStep (..))
+import           Game.Sega.Sonic.Game
 import           Game.Sega.Sonic.SpriteMappings (PatternIndex (..),
                                                  SpriteMapping (..))
 import           SDL                            hiding (Vector)
+
+data AnimationState
+  = AnimationState Word8 Word8
+  deriving (Eq, Ord, Show)
+
+emptyAnimationState :: AnimationState
+emptyAnimationState =
+  AnimationState 0 0
+
+stepAnimation :: AnimationScript -> AnimationState -> AnimationState
+stepAnimation (AnimationScript _ steps) (AnimationState stepIndex spriteIndex) =
+  case steps ! stepIndex of
+    AnimationFrame spriteIndex'  -> AnimationState (stepIndex + 1) spriteIndex'
+    AnimationJumpBack j -> AnimationState (stepIndex - j) spriteIndex
+    _                   -> AnimationState (stepIndex + 1) spriteIndex
+
+data Sprite
+  = Sprite [[SpriteMapping Texture]] (V2 CInt) AnimationScript AnimationState
+
+stepSprite :: Sprite -> Sprite
+stepSprite sprite =
+  sprite & spriteAnimationState %~ stepAnimation (sprite ^. spriteAnimationScript)
+
+spriteAnimationScript :: Lens' Sprite AnimationScript
+spriteAnimationScript =
+  lens f g
+  where
+    f (Sprite _ _ a _) =
+      a
+    g (Sprite a b _ d) c =
+      Sprite a b c d
+
+spriteAnimationState :: Lens' Sprite AnimationState
+spriteAnimationState =
+  lens f g
+  where
+    f (Sprite _ _ _ a) =
+      a
+    g (Sprite a b c _) d =
+      Sprite a b c d
+
+renderSprite :: (MonadReader Game m, MonadIO m) => Sprite -> m ()
+renderSprite (Sprite mappings (V2 x y) _ (AnimationState _ m)) = do
+  r <- view gameRenderer
+  o <- view (gameCamera . cameraX)
+  p <- view (gameCamera . cameraY)
+  for_ (mappings !! fromIntegral m) $ \(SpriteMapping l t w h e) ->
+    copy r e Nothing . Just $ Rectangle (P (V2 (fromIntegral l + x - o) (fromIntegral t + y - p))) (V2 (fromIntegral w) (fromIntegral h))
 
 copySpriteTile :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> Word16 -> V2 CInt -> m ()
 copySpriteTile renderer palette sprite c v = do

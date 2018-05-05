@@ -18,6 +18,7 @@ import           Game.Sega.Sonic.Blocks
 import           Game.Sega.Sonic.Chunks
 import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Error
+import           Game.Sega.Sonic.Game
 import           Game.Sega.Sonic.Layout
 import           Game.Sega.Sonic.Offsets
 import           Game.Sega.Sonic.Palette
@@ -67,24 +68,19 @@ renderLevelBlocks renderer offsets = do
   layoutContent <- decompressFile $ levelLayoutOffset offsets
   pure $ loadLayout chunkTextures layoutContent
 
-limitFrameRate :: Double -> IO a -> IO a
-limitFrameRate frameRate action = do
+limitFrameRate :: Double -> (IO () -> IO a) -> IO a
+limitFrameRate frameRate f = do
   startTicks <- ticks
-  a <- action
-  endTicks <- ticks
-  let difference = fromIntegral endTicks - fromIntegral startTicks
-  delay (floor $ ((1000.0 / frameRate) - difference))
-  pure a
+  f $ do
+    endTicks <- ticks
+    let difference = fromIntegral endTicks - fromIntegral startTicks
+    delay (floor $ ((1000.0 / frameRate) - difference))
 
 main :: IO ()
 main = do
   rom <- BS.readFile "sonic2.md"
   let
-    AnimationScript _ animationSteps =
-      loadAnimation . BS.unpack $ sliceOffset animationSonicWait rom
-    animationSteps' =
-      listArrayFill AnimationReset $ animationSteps
-    -- NTSC vs PAL
+    -- NTSC
     frameRate =
       29.97
 
@@ -112,6 +108,10 @@ main = do
   rendererRenderTarget renderer $= Nothing
 
   let
+    animationScript =
+      loadAnimation . BS.unpack $ sliceOffset animationSonicWait rom
+    sonic =
+      Sprite sonicTextures (V2 0 0) animationScript emptyAnimationState
     render textures o p =
       ifor_ textures $ \y row ->
         ifor_ row $ \x texture ->
@@ -119,7 +119,7 @@ main = do
             rectangle =
               Rectangle (P (V2 ((fromIntegral x * 0x80) - o) ((fromIntegral y * 0x80) - p))) 0x80
           in copy renderer texture Nothing (Just rectangle)
-    appLoop o p (n, m) c = limitFrameRate frameRate $ do
+    appLoop sonic' game = limitFrameRate frameRate $ \waitForFrameRate -> do
       events <- pollEvents
       let
         eventIsPress keycode event =
@@ -141,27 +141,21 @@ main = do
           isPressed KeycodeDown
         upPressed =
           isPressed KeycodeUp
-        cPressed =
-          isPressed KeycodeC
+        Game _ (V2 o p) =
+          game
         o' =
           o + if rightPressed then 0x10 else 0 + if leftPressed then -0x10 else 0
         p' =
           p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
-        c' =
-          (if cPressed then not else id) c
-        (n', m') =
-          case animationSteps' ! n of
-            AnimationFrame m''  -> (n + 1, m'')
-            AnimationJumpBack j -> (n - j, m)
-            _                   -> (n + 1, m)
-        renderSprite x ts =
-          for_ ts $ \(SpriteMapping l t w h e) ->
-            copy renderer e Nothing (Just $ Rectangle (P (V2 (fromIntegral l + x) ((fromIntegral t + 655) - p'))) (V2 (fromIntegral w) (fromIntegral h)))
+        game' =
+          Game renderer (V2 o' p')
+        sonic'' =
+          stepSprite sonic'
       rendererDrawColor renderer $= V4 0 0 0 0xFF
       clear renderer
       render chunkTextures o' p'
-      when c $ render collisionTextures o' p'
-      renderSprite (100 - o') (sonicTextures !! fromIntegral m')
+      runReaderT (renderSprite sonic') game'
       present renderer
-      unless qPressed (appLoop o' p' (n', m') c')
-  appLoop 0 0 (0, 0) False
+      waitForFrameRate
+      unless qPressed (appLoop sonic'' game')
+  appLoop sonic (Game renderer 0)

@@ -15,6 +15,7 @@ executable sonic2
                      , Game.Sega.Sonic.Chunks
                      , Game.Sega.Sonic.Collision
                      , Game.Sega.Sonic.Error
+                     , Game.Sega.Sonic.Game
                      , Game.Sega.Sonic.Layout
                      , Game.Sega.Sonic.Offsets
                      , Game.Sega.Sonic.Palette

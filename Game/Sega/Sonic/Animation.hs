@@ -4,10 +4,11 @@ module Game.Sega.Sonic.Animation (
 , loadAnimation
 ) where
 
-import           Data.Word (Word8)
+import           Data.Array.Bounded
+import           Data.Word          (Word8)
 
 data AnimationScript
-  = AnimationScript Word8 [AnimationStep]
+  = AnimationScript Word8 (BoundedArray Word8 AnimationStep)
   deriving (Eq, Ord, Show)
 
 data AnimationStep
@@ -40,4 +41,4 @@ loadAnimationSteps [] =
 
 loadAnimation :: [Word8] -> AnimationScript
 loadAnimation (b:bs) =
-  AnimationScript b $ loadAnimationSteps bs
+  AnimationScript b . listArrayFill AnimationReset $ loadAnimationSteps bs
