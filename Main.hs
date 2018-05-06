@@ -87,10 +87,10 @@ loadAndRun = do
   rendererRenderTarget r $= Nothing
 
   let
-    sonic =
-      Sprite sonicMappings (V2 100 660) sonicAnimationScript emptyAnimationState
-    tails =
-      Sprite tailsMappings (V2 50 660) tailsAnimationScript emptyAnimationState
+    sprites =
+      [ Sprite sonicMappings (V2 100 660) sonicAnimationScript emptyAnimationState
+      , Sprite tailsMappings (V2 50 660) tailsAnimationScript emptyAnimationState
+      ]
     render textures o p =
       ifor_ textures $ \y row ->
         ifor_ row $ \x texture ->
@@ -98,7 +98,7 @@ loadAndRun = do
             rectangle =
               Rectangle (P (V2 ((fromIntegral x * 0x80) - o) ((fromIntegral y * 0x80) - p))) 0x80
           in copy r texture Nothing (Just rectangle)
-    appLoop sonic' tails' game = do
+    appLoop sprites' game = do
       -- startTicks <- ticks
       events <- pollEvents
       let
@@ -131,30 +131,28 @@ loadAndRun = do
           p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
         game' =
           game & camera .~ V2 o' p'
-        sonic'' =
-          stepSprite sonic'
-        tails'' =
-          stepSprite tails'
+        sprites'' =
+          stepSprite <$> sprites'
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
       render chunkTextures o' p'
-      runReaderT (renderSprite sonic' *> renderSprite tails') game'
+      runReaderT (traverse_ renderSprite sprites') game'
       present r
       -- endTicks <- ticks
       -- let difference = fromIntegral endTicks - fromIntegral startTicks
       delay 31
-      unless qPressed (appLoop sonic'' tails'' game')
+      unless qPressed (appLoop sprites'' game')
   game <- ask
-  appLoop sonic tails game
+  appLoop sprites game
 
 main :: IO ()
 main = do
-  rom <- BS.readFile "sonic2.md"
+  rom' <- BS.readFile "sonic2.md"
   let
 
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 320 224 }
-  renderer <- createRenderer window (-1) defaultRenderer
-  rendererLogicalSize renderer $= Just (V2 320 224)
+  renderer' <- createRenderer window (-1) defaultRenderer
+  rendererLogicalSize renderer' $= Just (V2 320 224)
 
-  e <- runReaderT (runExceptT loadAndRun) (Game renderer 0 rom)
+  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom')
   either print pure e
