@@ -11,6 +11,7 @@ module Game.Sega.Sonic.Sprites (
 , stepSprite
 , spriteAnimationState
 , renderSprite
+, loadSpriteMappings
 ) where
 
 import           Control.Applicative            (liftA2)
@@ -26,9 +27,13 @@ import           Foreign.C.Types                (CInt)
 import           Game.Sega.Sonic.Animation      (AnimationScript (..),
                                                  AnimationStep (..))
 import           Game.Sega.Sonic.Game
-import           Game.Sega.Sonic.SpriteMappings (PatternIndex (..),
-                                                 SpriteMapping (..))
+import           Game.Sega.Sonic.Offsets
+import           Game.Sega.Sonic.Palette        (loadPalette)
+import           Game.Sega.Sonic.SpriteMappings
+import           Game.Sega.Sonic.Tiles          (applyDynamicPatternLoadCue,
+                                                 loadTiles)
 import           SDL                            hiding (Vector)
+import           Sega.MegaDrive.Palette         (readPalette)
 
 data AnimationState
   = AnimationState Word8 Word8 Word8
@@ -75,16 +80,16 @@ spriteAnimationState =
     g (Sprite a b c _) d =
       Sprite a b c d
 
-renderSprite :: (MonadReader Game m, MonadIO m) => Sprite -> m ()
+renderSprite :: (HasRenderer g, HasCamera g, MonadReader g m, MonadIO m) => Sprite -> m ()
 renderSprite (Sprite mappings (V2 x y) _ (AnimationState _ m _)) = do
-  r <- view gameRenderer
-  o <- view (gameCamera . cameraX)
-  p <- view (gameCamera . cameraY)
+  r <- view renderer
+  o <- view (camera . cameraX)
+  p <- view (camera . cameraY)
   for_ (mappings !! fromIntegral m) $ \(SpriteMapping l t w h e) ->
     copy r e Nothing . Just $ Rectangle (P (V2 (fromIntegral l + x - o) (fromIntegral t + y - p))) (V2 (fromIntegral w) (fromIntegral h))
 
-copySpriteTile :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> Word16 -> V2 CInt -> m ()
-copySpriteTile renderer palette sprite c v = do
+copySpriteTile :: (HasRenderer g, MonadReader g m, MonadIO m) => BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> Word16 -> V2 CInt -> m ()
+copySpriteTile palette sprite c v = do
   let
     tileSurface =
       sprite ! (c .&. 0x7FF)
@@ -98,19 +103,21 @@ copySpriteTile renderer palette sprite c v = do
   maybeTilePalette <- formatPalette format
   for_ maybeTilePalette $ \tilePalette ->
     setPaletteColors tilePalette (palette ! paletteIndex) 0
-  tileTexture <- createTextureFromSurface renderer tileSurface
-  copyEx renderer tileTexture Nothing (Just $ Rectangle (P v) 8) 0 Nothing $ V2 flipX flipY
+  r <- view renderer
+  tileTexture <- createTextureFromSurface r tileSurface
+  copyEx r tileTexture Nothing (Just $ Rectangle (P v) 8) 0 Nothing $ V2 flipX flipY
   destroyTexture tileTexture
 
-copySpriteMapping :: (MonadIO m) => Renderer -> BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> SpriteMapping PatternIndex -> m (SpriteMapping Texture)
-copySpriteMapping renderer palette tiles (SpriteMapping top left width height (PatternIndex patternIndex)) = do
+copySpriteMapping :: (HasRenderer g, MonadReader g m, MonadIO m) => BoundedArray Word8 (Vector (V4 Word8)) -> BoundedArray Word16 Surface -> SpriteMapping PatternIndex -> m (SpriteMapping Texture)
+copySpriteMapping palette tiles (SpriteMapping top left width height (PatternIndex patternIndex)) = do
   let
     width' =
       8 * (width + 1)
     height' =
       8 * (height + 1)
-  texture <- createTexture renderer ABGR8888 TextureAccessTarget $ V2 (fromIntegral width') (fromIntegral height')
-  rendererRenderTarget renderer $= Just texture
+  r <- view renderer
+  texture <- createTexture r ABGR8888 TextureAccessTarget $ V2 (fromIntegral width') (fromIntegral height')
+  rendererRenderTarget r $= Just texture
   textureBlendMode texture $= BlendAlphaBlend
   ifor_ (liftA2 (,) [0..width] [0..height]) $ \i (x, y) ->
     let
@@ -118,5 +125,20 @@ copySpriteMapping renderer palette tiles (SpriteMapping top left width height (P
         patternIndex + fromIntegral i
       position =
         V2 (fromIntegral x * 8) (fromIntegral y * 8)
-    in copySpriteTile renderer palette tiles patternIndex' position
+    in copySpriteTile palette tiles patternIndex' position
   pure $ SpriteMapping top left width' height' texture
+
+loadSpriteMappings :: (HasRom g, HasRenderer g, MonadReader g m, MonadIO m) => SpriteOffsets -> m [[SpriteMapping Texture]]
+loadSpriteMappings offsets = do
+  content <- sliceRom $ spriteArt offsets
+  mappings <- loadMappings <$> sliceRom (spriteMapping offsets)
+  maybePalette <- readPalette <$> sliceRom (spritePalette offsets)
+  dplc <- loadDynamicPatternLoadCues <$> sliceRom (spriteDPLC offsets)
+  surfaces <- loadTiles content
+  let
+    Just palette =
+      loadPalette <$> maybePalette
+    f (SpriteFrame s) (DynamicPatternLoadCueFrame dplcs) = do
+      sonicSurfaces' <- applyDynamicPatternLoadCue surfaces dplcs
+      traverse (copySpriteMapping palette sonicSurfaces') s
+  traverse (uncurry f) $ zip mappings dplc

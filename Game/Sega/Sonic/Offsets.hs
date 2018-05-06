@@ -109,6 +109,22 @@ ehz1 :: LevelOffsets
 ehz1 =
   LevelOffsets layoutEhz1 chunkEhzHtz blockEhz collisionEhzHtzPrimary paletteEhz artEhzHtz
 
+data SpriteOffsets
+  = SpriteOffsets { spriteArt     :: Offset
+                  , spriteMapping :: Offset
+                  , spritePalette :: Offset
+                  , spriteDPLC    :: Offset
+                  }
+  deriving (Eq, Ord, Show)
+
+sonicOffsets :: SpriteOffsets
+sonicOffsets =
+  SpriteOffsets artSonic mappingSonic paletteSonic dplcSonic
+
+tailsOffsets :: SpriteOffsets
+tailsOffsets =
+  SpriteOffsets artTails mappingTails paletteSonic dplcTails
+
 sliceOffset :: Offset -> BS.ByteString -> BS.ByteString
 sliceOffset (Offset start end) =
   BS.take (fromIntegral count) . BS.drop (fromIntegral start)

@@ -10,9 +10,10 @@ module Game.Sega.Sonic.Collision (
 ) where
 
 import           Control.Applicative     (liftA2)
-import           Control.Lens            (ix, (^?))
+import           Control.Lens            (ix, view, (^?))
 import           Control.Monad.Except    (MonadError, throwError)
 import           Control.Monad.IO.Class  (MonadIO)
+import           Control.Monad.Reader    (MonadReader)
 import           Data.Array.Bounded
 import           Data.Bits               ((.&.))
 import qualified Data.ByteString         as BS
@@ -22,6 +23,7 @@ import           Data.List.NonEmpty      (NonEmpty (..), nonEmpty)
 import           Data.List.Split         (chunksOf)
 import           Data.Word               (Word16, Word32, Word8)
 import           Game.Sega.Sonic.Error   (SonicError (..))
+import           Game.Sega.Sonic.Game    (HasRenderer (..))
 import           SDL
 
 collisionHeight :: Word8 -> Maybe Word8
@@ -36,9 +38,10 @@ collisionPixel h y =
   else 0xFF000000 :: Word32
 
 -- | <http://stephenuk.hacking-cult.org/SCHG/General/CollisionFormat/CollisionFormat.htm SCHG page on the collision format>
-loadCollisionTexture :: (MonadIO m) => Renderer -> [Word8] -> m Texture
-loadCollisionTexture renderer s = do
-  texture <- createTexture renderer ABGR8888 TextureAccessStatic 0x10
+loadCollisionTexture :: (HasRenderer g, MonadReader g m, MonadIO m) => [Word8] -> m Texture
+loadCollisionTexture s = do
+  r <- view renderer
+  texture <- createTexture r ABGR8888 TextureAccessStatic 0x10
   let
     height x =
       s ^? ix x >>= collisionHeight
@@ -50,9 +53,9 @@ loadCollisionTexture renderer s = do
       foldMap (uncurry pixel) $ liftA2 (,) [0..0xF] [0..0xF :: Word8]
   updateTexture texture Nothing (BSL.toStrict $ toLazyByteString content) (4 * 0x10)
 
-loadCollisionTextures :: (MonadIO m) => Renderer -> BS.ByteString -> m (BoundedArray Word8 Texture)
-loadCollisionTextures renderer =
-  traverse (loadCollisionTexture renderer) . listArrayFill [] . chunksOf 0x10 . BS.unpack
+loadCollisionTextures :: (HasRenderer g, MonadReader g m, MonadIO m) => BS.ByteString -> m (BoundedArray Word8 Texture)
+loadCollisionTextures =
+  traverse loadCollisionTexture . listArrayFill [] . chunksOf 0x10 . BS.unpack
 
 loadCollisionIndex :: (MonadError SonicError m) => BS.ByteString -> m (BoundedArray Word16 Word8)
 loadCollisionIndex c = do
