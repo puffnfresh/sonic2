@@ -3,7 +3,7 @@
 
 module Game.Sega.Sonic.Collision (
   collisionHeight
-, collisionPixel
+, collisionBitmap
 , loadCollisionTexture
 , loadCollisionTextures
 , loadCollisionIndex
@@ -31,11 +31,20 @@ collisionHeight n =
   let h = 0x1F .&. n
   in if h > 0 then Just (h - 1) else Nothing
 
-collisionPixel :: Maybe Word8 -> Word8 -> Word32
-collisionPixel h y =
-  if maybe True (< fromIntegral (0xF - y)) h
-  then 0xFFFFFFFF
-  else 0xFF000000 :: Word32
+collisionBitmap :: [Word8] -> BoundedArray Word8 Bool
+collisionBitmap s =
+  let
+    height x =
+      s ^? ix x >>= collisionHeight
+    heights =
+      listArrayCycle $ height <$> (0 :| [1..])
+    testPixel h y =
+      maybe False (>= fromIntegral (0xF - y)) h
+    pixel y x =
+      testPixel (heights ! x) y
+    content =
+      liftA2 pixel [0..0xF] [0..0xF :: Word8]
+  in listArrayFill False content
 
 -- | <http://stephenuk.hacking-cult.org/SCHG/General/CollisionFormat/CollisionFormat.htm SCHG page on the collision format>
 loadCollisionTexture :: (HasRenderer g, MonadReader g m, MonadIO m) => [Word8] -> m Texture
@@ -43,14 +52,10 @@ loadCollisionTexture s = do
   r <- view renderer
   texture <- createTexture r ABGR8888 TextureAccessStatic 0x10
   let
-    height x =
-      s ^? ix x >>= collisionHeight
-    heights =
-      listArrayCycle $ height <$> (0 :| [1..])
-    pixel y x =
-      word32LE $ collisionPixel (heights ! x) y
+    collisionPixel p =
+      word32LE $ if p then 0xFFFFFFFF else 0xFF000000 :: Word32
     content =
-      foldMap (uncurry pixel) $ liftA2 (,) [0..0xF] [0..0xF :: Word8]
+      foldMap collisionPixel $ collisionBitmap s
   updateTexture texture Nothing (BSL.toStrict $ toLazyByteString content) (4 * 0x10)
 
 loadCollisionTextures :: (HasRenderer g, MonadReader g m, MonadIO m) => BS.ByteString -> m (BoundedArray Word8 Texture)

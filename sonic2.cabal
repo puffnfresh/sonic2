@@ -19,9 +19,11 @@ executable sonic2
                      , Game.Sega.Sonic.Layout
                      , Game.Sega.Sonic.Offsets
                      , Game.Sega.Sonic.Palette
+                     , Game.Sega.Sonic.Player
                      , Game.Sega.Sonic.SpriteMappings
                      , Game.Sega.Sonic.Sprites
                      , Game.Sega.Sonic.Tiles
+                     , Game.Sega.Sonic.Types
   build-depends:       base
                      , array
                      , bytestring

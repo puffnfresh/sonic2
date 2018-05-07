@@ -32,6 +32,7 @@ import           Game.Sega.Sonic.Palette        (loadPalette)
 import           Game.Sega.Sonic.SpriteMappings
 import           Game.Sega.Sonic.Tiles          (applyDynamicPatternLoadCue,
                                                  loadTiles)
+import           Game.Sega.Sonic.Types          (HasPosition (..))
 import           SDL                            hiding (Vector)
 import           Sega.MegaDrive.Palette         (readPalette)
 
@@ -57,6 +58,15 @@ stepAnimation (AnimationScript spriteDelay steps) (AnimationState stepIndex spri
 
 data Sprite
   = Sprite [[SpriteMapping Texture]] (V2 CInt) AnimationScript AnimationState
+
+instance HasPosition Sprite where
+  position =
+    lens f g
+    where
+      f (Sprite _ a _ _) =
+        a
+      g (Sprite a _ c d) b =
+        Sprite a b c d
 
 stepSprite :: Sprite -> Sprite
 stepSprite sprite =

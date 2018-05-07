@@ -10,7 +10,9 @@ import           Control.Monad.Reader
 import           Data.Array.Bounded
 import           Data.Array.Bounded             ((!))
 import qualified Data.ByteString                as BS
+import           Data.ByteString.Lens
 import           Data.Foldable
+import           Data.Halves                    (collectHalves)
 import           Data.Semigroup                 ((<>))
 import           Data.Time                      (diffUTCTime, getCurrentTime)
 import           Game.Sega.Sonic.Animation
@@ -22,6 +24,7 @@ import           Game.Sega.Sonic.Game
 import           Game.Sega.Sonic.Layout
 import           Game.Sega.Sonic.Offsets
 import           Game.Sega.Sonic.Palette
+import           Game.Sega.Sonic.Player
 import           Game.Sega.Sonic.SpriteMappings
 import           Game.Sega.Sonic.Sprites
 import           Game.Sega.Sonic.Tiles
@@ -47,15 +50,33 @@ renderLevelCollisions offsets = do
   now <- liftIO getCurrentTime
   chunksContent <- decompressFile $ levelChunksOffset offsets
   liftIO $ putStrLn "Loading chunks..."
-  chunksTextures <- loadChunks reindexedCollisionTextures chunksContent
+  let chunksBlocks = loadChunks chunksContent
+  chunksTextures <- traverse (loadChunkTexture reindexedCollisionTextures) chunksBlocks
   now' <- liftIO getCurrentTime
   liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
 
   layoutContent <- decompressFile $ levelLayoutOffset offsets
-  pure $ loadLayout chunksTextures layoutContent
+  let
+    layout =
+      loadLayout layoutContent
+  pure $ mapChunkTextures chunksTextures layout
 
-renderLevelBlocks :: (HasRom g, HasRenderer g, MonadReader g m, MonadError SonicError m, MonadIO m) => LevelOffsets -> m [[Texture]]
-renderLevelBlocks offsets = do
+-- NTSC
+frameRate :: Double
+frameRate =
+  60
+
+loadAndRun :: (MonadReader Game m, MonadError SonicError m, MonadIO m) => m ()
+loadAndRun = do
+
+
+  sonicMappings <- loadSpriteMappings sonicOffsets
+  tailsMappings <- loadSpriteMappings tailsOffsets
+
+  sonicAnimationScript <- loadAnimation . BS.unpack <$> sliceRom animationSonicWait
+  tailsAnimationScript <- loadAnimation . BS.unpack <$> sliceRom animationTailsWait
+
+  let offsets = ehz1
   maybeSonicPalette <- readPalette <$> sliceRom paletteSonic
   maybePalette <- readPalette <$> sliceRom (levelPaletteOffset offsets)
   palette <- maybe (throwError . SonicPaletteError $ levelPaletteOffset offsets) (pure . loadPalette) (maybeSonicPalette <> maybePalette)
@@ -64,33 +85,32 @@ renderLevelBlocks offsets = do
   blockContent <- decompressFile $ levelBlocksOffset offsets
   blockTextures <- loadBlocks palette tileSurfaces blockContent
   chunkContent <- decompressFile $ levelChunksOffset offsets
-  chunkTextures <- loadChunks blockTextures chunkContent
+  let chunkBlocks = loadChunks chunkContent
+  chunkTextures <- traverse (loadChunkTexture blockTextures) chunkBlocks
   layoutContent <- decompressFile $ levelLayoutOffset offsets
-  pure $ loadLayout chunkTextures layoutContent
+  let
+    layout =
+      loadLayout layoutContent
+    layoutChunkTextures =
+      mapChunkTextures chunkTextures layout
 
--- NTSC
-frameRate :: Double
-frameRate =
-  29.97
-
-loadAndRun :: (MonadReader Game m, MonadError SonicError m, MonadIO m) => m ()
-loadAndRun = do
-  sonicMappings <- loadSpriteMappings sonicOffsets
-  tailsMappings <- loadSpriteMappings tailsOffsets
-
-  sonicAnimationScript <- loadAnimation . BS.unpack <$> sliceRom animationSonicWait
-  tailsAnimationScript <- loadAnimation . BS.unpack <$> sliceRom animationTailsWait
-
-  chunkTextures <- renderLevelBlocks ehz1
+  -- chunkTextures <- renderLevelBlocks ehz1
+  collisionTextures <- renderLevelCollisions ehz1
+  startPos <- sliceRom $ levelStartPos ehz1
+  let
+    playerStart =
+      case (startPos ^. unpackedBytes . collectHalves) of
+        [x, y] ->
+          V2 (fromIntegral x) (fromIntegral y)
+        _ ->
+          V2 0 0
 
   r <- view renderer
   rendererRenderTarget r $= Nothing
 
   let
-    sprites =
-      [ Sprite sonicMappings (V2 100 660) sonicAnimationScript emptyAnimationState
-      , Sprite tailsMappings (V2 50 660) tailsAnimationScript emptyAnimationState
-      ]
+    playerSprite =
+      Sprite sonicMappings (V2 0 0) sonicAnimationScript emptyAnimationState
     render textures o p =
       ifor_ textures $ \y row ->
         ifor_ row $ \x texture ->
@@ -98,7 +118,7 @@ loadAndRun = do
             rectangle =
               Rectangle (P (V2 ((fromIntegral x * 0x80) - o) ((fromIntegral y * 0x80) - p))) 0x80
           in copy r texture Nothing (Just rectangle)
-    appLoop sprites' game = do
+    appLoop playerSprite' game = do
       -- startTicks <- ticks
       events <- pollEvents
       let
@@ -129,21 +149,29 @@ loadAndRun = do
           o + if rightPressed then 0x10 else 0 + if leftPressed then -0x10 else 0
         p' =
           p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
+        playerSprite'' =
+          playerSprite' & position .~ (game ^. player . position)
         game' =
           game & camera .~ V2 o' p'
-        sprites'' =
-          stepSprite <$> sprites'
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
-      render chunkTextures o' p'
-      runReaderT (traverse_ renderSprite sprites') game'
+      render layoutChunkTextures o' p'
+      render collisionTextures o' p'
+      runReaderT (renderSprite playerSprite'') game'
+      let
+        V2 layoutX layoutY =
+          (`div` 0x80) <$> (game ^. player . position) + V2 0 0x13
+        chunkIndex =
+          layout !! fromIntegral layoutY !! fromIntegral layoutX
+      -- liftIO $ print chunkIndex
+      copy r (chunkTextures ! chunkIndex) Nothing (Just $ Rectangle (P (V2 0 0)) (V2 128 128))
       present r
       -- endTicks <- ticks
       -- let difference = fromIntegral endTicks - fromIntegral startTicks
-      delay 31
-      unless qPressed (appLoop sprites'' game')
+      delay 16
+      unless qPressed (appLoop (stepSprite playerSprite'') game')
   game <- ask
-  appLoop sprites game
+  appLoop playerSprite (game & player . position .~ playerStart)
 
 main :: IO ()
 main = do
@@ -154,5 +182,5 @@ main = do
   renderer' <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer' $= Just (V2 320 224)
 
-  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom')
+  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0x13))
   either print pure e

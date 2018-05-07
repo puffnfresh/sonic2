@@ -95,6 +95,10 @@ chunkEhzHtz :: Offset
 chunkEhzHtz =
   Offset 0x99D34 0x9CFD4
 
+startPosEhz1 :: Offset
+startPosEhz1 =
+  Offset 0xC1D0 0xC1D4
+
 data LevelOffsets
   = LevelOffsets { levelLayoutOffset    :: Offset
                  , levelChunksOffset    :: Offset
@@ -102,12 +106,13 @@ data LevelOffsets
                  , levelCollisionOffset :: Offset
                  , levelPaletteOffset   :: Offset
                  , levelArtOffset       :: Offset
+                 , levelStartPos        :: Offset
                  }
   deriving (Eq, Ord, Show)
 
 ehz1 :: LevelOffsets
 ehz1 =
-  LevelOffsets layoutEhz1 chunkEhzHtz blockEhz collisionEhzHtzPrimary paletteEhz artEhzHtz
+  LevelOffsets layoutEhz1 chunkEhzHtz blockEhz collisionEhzHtzPrimary paletteEhz artEhzHtz startPosEhz1
 
 data SpriteOffsets
   = SpriteOffsets { spriteArt     :: Offset
