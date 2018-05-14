@@ -22,8 +22,6 @@ import           Game.Sega.Sonic.Error
 import           Game.Sega.Sonic.Game   (HasRenderer (..))
 import           SDL
 
-import Debug.Trace
-
 loadChunkTexture :: (HasRenderer g, MonadReader g m, MonadIO m) => BoundedArray Word16 Texture -> Chunk -> m Texture
 loadChunkTexture blocks chunkBlocks = do
   r <- view renderer
@@ -40,6 +38,7 @@ loadChunkTexture blocks chunkBlocks = do
 
 data ChunkBlock
   = ChunkBlock Word16 Bool Bool
+  deriving (Show, Eq, Ord)
 
 emptyChunkBlock :: ChunkBlock
 emptyChunkBlock =

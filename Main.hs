@@ -3,7 +3,6 @@
 {-# LANGUAGE OverloadedStrings     #-}
 
 import qualified Codec.Compression.Kosinski     as Kosinski
-import           Control.Applicative            (liftA2)
 import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -11,10 +10,12 @@ import           Data.Array.Bounded
 import           Data.Array.Bounded             ((!))
 import qualified Data.ByteString                as BS
 import           Data.ByteString.Lens
-import           Data.Foldable
 import           Data.Halves                    (collectHalves)
+import           Data.Maybe                     (fromMaybe)
 import           Data.Semigroup                 ((<>))
 import           Data.Time                      (diffUTCTime, getCurrentTime)
+import           Data.Word
+import           Foreign.C.Types                (CInt)
 import           Game.Sega.Sonic.Animation
 import           Game.Sega.Sonic.Blocks
 import           Game.Sega.Sonic.Chunks
@@ -37,39 +38,41 @@ decompressFile offset = do
   content <- maybe (throwError $ SonicLoadError offset) pure maybeContent
   maybe (throwError $ SonicDecompressionError offset) pure $ Kosinski.decompress content
 
-renderLevelCollisions :: (HasRom g, HasRenderer g, MonadReader g m, MonadError SonicError m, MonadIO m) => LevelOffsets -> m [[Texture]]
-renderLevelCollisions offsets = do
-  collisionIndexContent <- decompressFile $ levelCollisionOffset offsets
-  collisionIndex <- loadCollisionIndex collisionIndexContent
-
-  collisionContent <- sliceRom collisionArray1
-  collisionTextures <- loadCollisionTextures collisionContent
-
-  let reindexedCollisionTextures = (collisionTextures !) <$> collisionIndex
-
-  now <- liftIO getCurrentTime
-  chunksContent <- decompressFile $ levelChunksOffset offsets
-  liftIO $ putStrLn "Loading chunks..."
-  let chunksBlocks = loadChunks chunksContent
-  chunksTextures <- traverse (loadChunkTexture reindexedCollisionTextures) chunksBlocks
-  now' <- liftIO getCurrentTime
-  liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
-
-  layoutContent <- decompressFile $ levelLayoutOffset offsets
-  let
-    layout =
-      loadLayout layoutContent
-  pure $ mapChunkTextures chunksTextures layout
-
 -- NTSC
 frameRate :: Double
 frameRate =
   60
 
+collideWithLevel :: [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> V2 CInt -> V2 CInt -> V2 CInt
+collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius p =
+  go $ p + V2 1 0 + gravity
+  where
+    gravity =
+      V2 0 4
+    go p' =
+      let
+        V2 layoutX layoutY =
+          (`div` 0x80) <$> p' + radius
+        chunkIndex =
+          layout !! fromIntegral layoutY !! fromIntegral layoutX
+        V2 blockX blockY =
+          ((`div` 0x10) . (`rem` 0x80)) <$> p' + radius
+        ChunkBlock blockIndex _ _ =
+          (chunkBlocks ! chunkIndex) ! fromIntegral ((blockY * 8) + blockX)
+        V2 pixelX pixelY =
+          (`rem` 0x10) <$> p' + radius
+        CollisionBlock heights =
+          reindexedCollisionBlocks ! blockIndex
+        height =
+          fromMaybe 0 (heights ! fromIntegral pixelX)
+        heightDifference =
+          (0x10 - pixelY) - (fromIntegral height + 2)
+      in if heightDifference < 0
+         then go (p' + V2 0 heightDifference)
+         else p'
+
 loadAndRun :: (MonadReader Game m, MonadError SonicError m, MonadIO m) => m ()
 loadAndRun = do
-
-
   sonicMappings <- loadSpriteMappings sonicOffsets
   tailsMappings <- loadSpriteMappings tailsOffsets
 
@@ -94,8 +97,26 @@ loadAndRun = do
     layoutChunkTextures =
       mapChunkTextures chunkTextures layout
 
-  -- chunkTextures <- renderLevelBlocks ehz1
-  collisionTextures <- renderLevelCollisions ehz1
+  collisionIndexContent <- decompressFile $ levelCollisionOffset offsets
+  collisionIndex <- loadCollisionIndex collisionIndexContent
+
+  collisionContent <- sliceRom collisionArray1
+  let collisionBlocks = loadCollisionBlocks collisionContent
+  collisionBlockTextures <- traverse loadCollisionTexture collisionBlocks
+
+  let reindexedCollisionTextures = (collisionBlockTextures !) <$> collisionIndex
+      reindexedCollisionBlocks = (collisionBlocks !) <$> collisionIndex
+
+  now <- liftIO getCurrentTime
+  chunksContent <- decompressFile $ levelChunksOffset offsets
+  liftIO $ putStrLn "Loading chunks..."
+  let chunksBlocks = loadChunks chunksContent
+  chunksTextures <- traverse (loadChunkTexture reindexedCollisionTextures) chunksBlocks
+  now' <- liftIO getCurrentTime
+  liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
+
+  let collisionTextures = mapChunkTextures chunksTextures layout
+
   startPos <- sliceRom $ levelStartPos ehz1
   let
     playerStart =
@@ -153,18 +174,12 @@ loadAndRun = do
           playerSprite' & position .~ (game ^. player . position)
         game' =
           game & camera .~ V2 o' p'
+               & player . position %~ collideWithLevel layout chunkBlocks reindexedCollisionBlocks (game ^. player . playerRadius)
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
       render layoutChunkTextures o' p'
-      render collisionTextures o' p'
+      -- render collisionTextures o' p'
       runReaderT (renderSprite playerSprite'') game'
-      let
-        V2 layoutX layoutY =
-          (`div` 0x80) <$> (game ^. player . position) + V2 0 0x13
-        chunkIndex =
-          layout !! fromIntegral layoutY !! fromIntegral layoutX
-      -- liftIO $ print chunkIndex
-      copy r (chunkTextures ! chunkIndex) Nothing (Just $ Rectangle (P (V2 0 0)) (V2 128 128))
       present r
       -- endTicks <- ticks
       -- let difference = fromIntegral endTicks - fromIntegral startTicks
@@ -182,5 +197,5 @@ main = do
   renderer' <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer' $= Just (V2 320 224)
 
-  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0x13))
+  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) 0 0)
   either print pure e
