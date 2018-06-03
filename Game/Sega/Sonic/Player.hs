@@ -1,58 +1,157 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Game.Sega.Sonic.Player (
   Player(..)
 , HasPosition(..)
+, playerVelocity
 , playerRadius
+, playerTopSpeed
+, playerAcceleration
+, playerDeceleration
+, playerInertia
+, moveRight
+, traction
+, normalTopSpeed
+, normalAcceleration
+, normalDeceleration
+, underWaterTopSpeed
+, underWaterAcceleration
+, underWaterDeceleration
 ) where
 
+
 import           Control.Lens
+import           Control.Monad.State
+import           Data.Bits
+import           Data.Int
 import           Foreign.C.Types
 import           Game.Sega.Sonic.Types
 import           SDL
 
 data Player
-  = Player (V2 CInt) (V2 CInt) (V2 CInt) Float Float
+  = Player (V2 CInt) (V2 CInt) (V2 CInt) Int16 Int16 Int16 Int16
+  deriving (Eq, Ord, Show)
 
 instance HasPosition Player where
   position =
-    lens f g
+    lens y z
     where
-      f (Player a _ _ _ _) =
+      y (Player a _ _ _ _ _ _) =
         a
-      g (Player _ b c d e) a =
-        Player a b c d e
+      z (Player _ b c d e f g) a =
+        Player a b c d e f g
 
 playerVelocity :: Lens' Player (V2 CInt)
 playerVelocity =
-  lens f g
+  lens y z
   where
-    f (Player _ b _ _ _) =
+    y (Player _ b _ _ _ _ _) =
       b
-    g (Player a _ c d e) b =
-      Player a b c d e
+    z (Player a _ c d e f g) b =
+      Player a b c d e f g
 
 playerRadius :: Lens' Player (V2 CInt)
 playerRadius =
-  lens f g
+  lens y z
   where
-    f (Player _ _ c _ _) =
+    y (Player _ _ c _ _ _ _) =
       c
-    g (Player a b _ d e) c =
-      Player a b c d e
+    z (Player a b _ d e f g) c =
+      Player a b c d e f g
 
-playerTopSpeed :: Lens' Player Float
+playerTopSpeed :: Lens' Player Int16
 playerTopSpeed =
-  lens f g
+  lens y z
   where
-    f (Player _ _ _ d _) =
+    y (Player _ _ _ d _ _ _) =
       d
-    g (Player a b c _ e) d =
-      Player a b c d e
+    z (Player a b c _ e f g) d =
+      Player a b c d e f g
 
-playerInertia :: Lens' Player Float
-playerInertia =
-  lens f g
+playerAcceleration :: Lens' Player Int16
+playerAcceleration =
+  lens y z
   where
-    f (Player _ _ _ _ e) =
+    y (Player _ _ _ _ e _ _) =
       e
-    g (Player a b c d _) e =
-      Player a b c d e
+    z (Player a b c d _ f g) e =
+      Player a b c d e f g
+
+playerDeceleration :: Lens' Player Int16
+playerDeceleration =
+  lens y z
+  where
+    y (Player _ _ _ _ _ f _) =
+      f
+    z (Player a b c d e _ g) f =
+      Player a b c d e f g
+
+playerInertia :: Lens' Player Int16
+playerInertia =
+  lens y z
+  where
+    y (Player _ _ _ _ _ _ g) =
+      g
+    z (Player a b c d e f _) g =
+      Player a b c d e f g
+
+moveRight :: (MonadState Player m) => m ()
+moveRight = do
+  acceleration <- use playerAcceleration
+  playerInertia += acceleration
+  topSpeed <- use playerTopSpeed
+  i <- use playerInertia
+  if i > topSpeed
+  then do
+    playerInertia -= acceleration
+    i' <- use playerInertia
+    if i' >= topSpeed
+    then return ()
+    else playerInertia .= topSpeed
+  else return ()
+
+traction :: (MonadState Player m) => m ()
+traction = do
+  let
+    angle =
+      0
+    cosine =
+      1
+    sine =
+      0
+  inertia <- use playerInertia
+  let
+    x =
+      -- (inertia * cosine) `shiftR` 8
+      inertia * cosine
+    y =
+      -- (inertia * sine) `shiftR` 8
+      inertia * sine
+    v =
+      V2 (fromIntegral x) (fromIntegral y)
+  playerVelocity .= v
+
+normalTopSpeed :: Int16
+normalTopSpeed =
+  0x600
+
+normalAcceleration :: Int16
+normalAcceleration =
+  0xC
+
+normalDeceleration :: Int16
+normalDeceleration =
+  0x80
+
+underWaterTopSpeed :: Int16
+underWaterTopSpeed =
+  0x300
+
+underWaterAcceleration :: Int16
+underWaterAcceleration =
+  0x6
+
+underWaterDeceleration :: Int16
+underWaterDeceleration =
+  0x40

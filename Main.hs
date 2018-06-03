@@ -6,6 +6,7 @@ import qualified Codec.Compression.Kosinski     as Kosinski
 import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import           Control.Monad.State
 import           Data.Array.Bounded
 import           Data.Array.Bounded             ((!))
 import qualified Data.ByteString                as BS
@@ -45,7 +46,7 @@ frameRate =
 
 collideWithLevel :: [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> V2 CInt -> V2 CInt -> V2 CInt
 collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius p =
-  go $ p + V2 1 0 + gravity
+  go $ p + gravity
   where
     gravity =
       V2 0 4
@@ -172,9 +173,16 @@ loadAndRun = do
           p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
         playerSprite'' =
           playerSprite' & position .~ (game ^. player . position)
+        updateGame = do
+          zoom player $ moveRight *> traction
+          velocity <- use (player . playerVelocity)
+          player . position += velocity
+          radius <- use (player . playerRadius)
+          player . position %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius
+          camera .= V2 o' p'
         game' =
-          game & camera .~ V2 o' p'
-               & player . position %~ collideWithLevel layout chunkBlocks reindexedCollisionBlocks (game ^. player . playerRadius)
+          execState updateGame game
+      liftIO . print $ game' ^. player . playerVelocity
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
       render layoutChunkTextures o' p'
@@ -197,5 +205,5 @@ main = do
   renderer' <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer' $= Just (V2 320 224)
 
-  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) 0 0)
+  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) normalAcceleration normalDeceleration 0 0)
   either print pure e
