@@ -11,6 +11,7 @@ module Game.Sega.Sonic.Player (
 , playerDeceleration
 , playerInertia
 , moveRight
+, settleRight
 , traction
 , normalTopSpeed
 , normalAcceleration
@@ -18,12 +19,14 @@ module Game.Sega.Sonic.Player (
 , underWaterTopSpeed
 , underWaterAcceleration
 , underWaterDeceleration
+, pixels
+, objectMove
 ) where
-
 
 import           Control.Lens
 import           Control.Monad.State
 import           Data.Bits
+import           Data.Halves           (finiteBitHalves)
 import           Data.Int
 import           Foreign.C.Types
 import           Game.Sega.Sonic.Types
@@ -102,35 +105,53 @@ moveRight = do
   playerInertia += acceleration
   topSpeed <- use playerTopSpeed
   i <- use playerInertia
-  if i > topSpeed
-  then do
+  unless (i < topSpeed) $ do
     playerInertia -= acceleration
     i' <- use playerInertia
-    if i' >= topSpeed
-    then return ()
-    else playerInertia .= topSpeed
-  else return ()
+    when (i' >= topSpeed) $
+      playerInertia .= topSpeed
+
+settleRight :: (MonadState Player m) => m ()
+settleRight =
+  playerInertia %= \i -> max 0 (i - 0xC)
 
 traction :: (MonadState Player m) => m ()
 traction = do
-  let
-    angle =
-      0
-    cosine =
-      1
-    sine =
-      0
+  -- let
+  --   angle =
+  --     0
+  --   cosine =
+  --     256
+  --   sine =
+  --     0
   inertia <- use playerInertia
-  let
-    x =
-      -- (inertia * cosine) `shiftR` 8
-      inertia * cosine
-    y =
-      -- (inertia * sine) `shiftR` 8
-      inertia * sine
-    v =
-      V2 (fromIntegral x) (fromIntegral y)
-  playerVelocity .= v
+  -- let
+  --   x =
+  --     (inertia * cosine) `shiftR` 8
+  --   y =
+  --     (inertia * sine) `shiftR` 8
+  --   v =
+  --     V2 (fromIntegral x) (fromIntegral y)
+  -- playerVelocity .= v
+  playerVelocity .= V2 (fromIntegral inertia) 0
+
+cIntHalves :: Iso' CInt (Int16, Int16)
+cIntHalves =
+  finiteBitHalves
+
+pixels :: Lens' (V2 CInt) (V2 Int16)
+pixels =
+  lens f g
+  where
+    f (V2 a b) =
+      V2 (a ^. cIntHalves . _1)  (b ^. cIntHalves . _2)
+    g (V2 a b) (V2 x y) =
+      V2 (a & cIntHalves . _1 .~ x)  (b & cIntHalves . _2 .~ y)
+
+objectMove :: (MonadState Player m) => m ()
+objectMove = do
+  velocity <- use playerVelocity
+  position += ((`shiftL` 8) <$> velocity)
 
 normalTopSpeed :: Int16
 normalTopSpeed =

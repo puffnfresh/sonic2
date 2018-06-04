@@ -9,9 +9,11 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Array.Bounded
 import           Data.Array.Bounded             ((!))
+import           Data.Bits
 import qualified Data.ByteString                as BS
 import           Data.ByteString.Lens
 import           Data.Halves                    (collectHalves)
+import           Data.Int
 import           Data.Maybe                     (fromMaybe)
 import           Data.Semigroup                 ((<>))
 import           Data.Time                      (diffUTCTime, getCurrentTime)
@@ -44,7 +46,7 @@ frameRate :: Double
 frameRate =
   60
 
-collideWithLevel :: [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> V2 CInt -> V2 CInt -> V2 CInt
+collideWithLevel :: [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> V2 Int16 -> V2 Int16 -> V2 Int16
 collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius p =
   go $ p + gravity
   where
@@ -133,7 +135,7 @@ loadAndRun = do
   let
     playerSprite =
       Sprite sonicMappings (V2 0 0) sonicAnimationScript emptyAnimationState
-    render textures o p =
+    render textures (V2 o p) =
       ifor_ textures $ \y row ->
         ifor_ row $ \x texture ->
           let
@@ -157,35 +159,33 @@ loadAndRun = do
           isPressed KeycodeQ
         rightPressed =
           isPressed KeycodeRight
-        leftPressed =
-          isPressed KeycodeLeft
-        downPressed =
-          isPressed KeycodeDown
-        upPressed =
-          isPressed KeycodeUp
-        o =
-          game ^. camera . cameraX
-        p =
-          game ^. camera . cameraY
-        o' =
-          o + if rightPressed then 0x10 else 0 + if leftPressed then -0x10 else 0
-        p' =
-          p + if downPressed then 0x10 else 0 + if upPressed then -0x10 else 0
+        -- leftPressed =
+        --   isPressed KeycodeLeft
+        -- downPressed =
+        --   isPressed KeycodeDown
+        -- upPressed =
+        --   isPressed KeycodeUp
         playerSprite'' =
-          playerSprite' & position .~ (game ^. player . position)
+          playerSprite' & position .~ (fromIntegral <$> (game ^. player . position . pixels))
         updateGame = do
-          zoom player $ moveRight *> traction
-          velocity <- use (player . playerVelocity)
-          player . position += velocity
-          radius <- use (player . playerRadius)
-          player . position %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius
-          camera .= V2 o' p'
+          zoom player $ do
+            when rightPressed moveRight
+            traction
+            when (not rightPressed) settleRight
+            objectMove
+            radius <- use playerRadius
+            position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)
+          p' <- use (player . position . pixels)
+          camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
           execState updateGame game
-      liftIO . print $ game' ^. player . playerVelocity
+      -- liftIO . print $ game' ^. player . playerInertia
+      -- liftIO . print $ game' ^. player . playerVelocity
+      -- liftIO . print $ game' ^. player . position
+      -- liftIO . print $ game' ^. player . position . pixels
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
-      render layoutChunkTextures o' p'
+      render layoutChunkTextures (game' ^. camera)
       -- render collisionTextures o' p'
       runReaderT (renderSprite playerSprite'') game'
       present r
@@ -194,7 +194,7 @@ loadAndRun = do
       delay 16
       unless qPressed (appLoop (stepSprite playerSprite'') game')
   game <- ask
-  appLoop playerSprite (game & player . position .~ playerStart)
+  appLoop playerSprite (game & player . position . pixels .~ playerStart)
 
 main :: IO ()
 main = do
@@ -205,5 +205,5 @@ main = do
   renderer' <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer' $= Just (V2 320 224)
 
-  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) normalAcceleration normalDeceleration 0 0)
+  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) normalTopSpeed normalAcceleration normalDeceleration 0)
   either print pure e
