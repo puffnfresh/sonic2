@@ -10,6 +10,7 @@ module Game.Sega.Sonic.Player (
 , playerAcceleration
 , playerDeceleration
 , playerInertia
+, jump
 , moveRight
 , moveLeft
 , settle
@@ -171,6 +172,16 @@ pixels =
       V2 (a ^. cIntHalves . _1)  (b ^. cIntHalves . _2)
     g (V2 a b) (V2 x y) =
       V2 (a & cIntHalves . _1 .~ x)  (b & cIntHalves . _2 .~ y)
+
+jump :: (MonadState Player m) => m ()
+jump = do
+  let
+    angle =
+      0
+    jumpSpeed =
+      0x680
+  -- cmpi.w  #6,d1  ; does Sonic have enough room to jump?
+  playerVelocity . _y += jumpSpeed `shiftR` 8
 
 objectMove :: (MonadState Player m) => m ()
 objectMove = do

@@ -157,12 +157,12 @@ loadAndRun = do
           any (eventIsPress keycode) events
         qPressed =
           isPressed KeycodeQ
+        jumpPressed =
+          isPressed KeycodeA || isPressed KeycodeS || isPressed KeycodeD
         leftPressed =
           isPressed KeycodeLeft
         rightPressed =
           isPressed KeycodeRight
-        -- leftPressed =
-        --   isPressed KeycodeLeft
         -- downPressed =
         --   isPressed KeycodeDown
         -- upPressed =
@@ -171,6 +171,7 @@ loadAndRun = do
           playerSprite' & position .~ (fromIntegral <$> (game ^. player . position . pixels))
         updateGame = do
           zoom player $ do
+            when jumpPressed jump
             if rightPressed
             then moveRight
             else when leftPressed moveLeft
