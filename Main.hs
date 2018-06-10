@@ -157,6 +157,8 @@ loadAndRun = do
           any (eventIsPress keycode) events
         qPressed =
           isPressed KeycodeQ
+        leftPressed =
+          isPressed KeycodeLeft
         rightPressed =
           isPressed KeycodeRight
         -- leftPressed =
@@ -169,9 +171,11 @@ loadAndRun = do
           playerSprite' & position .~ (fromIntegral <$> (game ^. player . position . pixels))
         updateGame = do
           zoom player $ do
-            when rightPressed moveRight
+            if rightPressed
+            then moveRight
+            else when leftPressed moveLeft
             traction
-            when (not rightPressed) settleRight
+            when (not rightPressed && not leftPressed) settle
             objectMove
             radius <- use playerRadius
             position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)

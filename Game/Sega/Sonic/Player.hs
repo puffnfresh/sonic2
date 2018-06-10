@@ -11,7 +11,8 @@ module Game.Sega.Sonic.Player (
 , playerDeceleration
 , playerInertia
 , moveRight
-, settleRight
+, moveLeft
+, settle
 , traction
 , normalTopSpeed
 , normalAcceleration
@@ -111,9 +112,32 @@ moveRight = do
     when (i' >= topSpeed) $
       playerInertia .= topSpeed
 
+moveLeft :: (MonadState Player m) => m ()
+moveLeft = do
+  acceleration <- use playerAcceleration
+  playerInertia -= acceleration
+  topSpeed <- use playerTopSpeed
+  i <- use playerInertia
+  unless (i > -topSpeed) $ do
+    playerInertia += acceleration
+    i' <- use playerInertia
+    when (i' <= -topSpeed) $
+      playerInertia .= -topSpeed
+
+settle :: (MonadState Player m) => m ()
+settle = do
+  i <- use playerInertia
+  if i > 0
+  then settleRight
+  else settleLeft
+
 settleRight :: (MonadState Player m) => m ()
-settleRight =
+settleRight = do
   playerInertia %= \i -> max 0 (i - 0xC)
+
+settleLeft :: (MonadState Player m) => m ()
+settleLeft = do
+  playerInertia %= \i -> min 0 (i + 0xC)
 
 traction :: (MonadState Player m) => m ()
 traction = do
