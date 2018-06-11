@@ -3,6 +3,7 @@
 
 module Game.Sega.Sonic.Player (
   Player(..)
+, PlayerMode(..)
 , HasPosition(..)
 , playerVelocity
 , playerRadius
@@ -10,6 +11,7 @@ module Game.Sega.Sonic.Player (
 , playerAcceleration
 , playerDeceleration
 , playerInertia
+, playerMode
 , jump
 , moveRight
 , moveLeft
@@ -23,6 +25,7 @@ module Game.Sega.Sonic.Player (
 , underWaterDeceleration
 , pixels
 , objectMove
+, objectMoveAndFall
 ) where
 
 import           Control.Lens
@@ -35,71 +38,85 @@ import           Game.Sega.Sonic.Types
 import           SDL
 
 data Player
-  = Player (V2 CInt) (V2 CInt) (V2 CInt) Int16 Int16 Int16 Int16
+  = Player (V2 CInt) (V2 Int16) (V2 CInt) Int16 Int16 Int16 Int16 PlayerMode
+  deriving (Eq, Ord, Show)
+
+data PlayerMode
+  = MdNormal
+  | MdJump
   deriving (Eq, Ord, Show)
 
 instance HasPosition Player where
   position =
     lens y z
     where
-      y (Player a _ _ _ _ _ _) =
+      y (Player a _ _ _ _ _ _ _) =
         a
-      z (Player _ b c d e f g) a =
-        Player a b c d e f g
+      z (Player _ b c d e f g h) a =
+        Player a b c d e f g h
 
-playerVelocity :: Lens' Player (V2 CInt)
+playerVelocity :: Lens' Player (V2 Int16)
 playerVelocity =
   lens y z
   where
-    y (Player _ b _ _ _ _ _) =
+    y (Player _ b _ _ _ _ _ _) =
       b
-    z (Player a _ c d e f g) b =
-      Player a b c d e f g
+    z (Player a _ c d e f g h) b =
+      Player a b c d e f g h
 
 playerRadius :: Lens' Player (V2 CInt)
 playerRadius =
   lens y z
   where
-    y (Player _ _ c _ _ _ _) =
+    y (Player _ _ c _ _ _ _ _) =
       c
-    z (Player a b _ d e f g) c =
-      Player a b c d e f g
+    z (Player a b _ d e f g h) c =
+      Player a b c d e f g h
 
 playerTopSpeed :: Lens' Player Int16
 playerTopSpeed =
   lens y z
   where
-    y (Player _ _ _ d _ _ _) =
+    y (Player _ _ _ d _ _ _ _) =
       d
-    z (Player a b c _ e f g) d =
-      Player a b c d e f g
+    z (Player a b c _ e f g h) d =
+      Player a b c d e f g h
 
 playerAcceleration :: Lens' Player Int16
 playerAcceleration =
   lens y z
   where
-    y (Player _ _ _ _ e _ _) =
+    y (Player _ _ _ _ e _ _ _) =
       e
-    z (Player a b c d _ f g) e =
-      Player a b c d e f g
+    z (Player a b c d _ f g h) e =
+      Player a b c d e f g h
 
 playerDeceleration :: Lens' Player Int16
 playerDeceleration =
   lens y z
   where
-    y (Player _ _ _ _ _ f _) =
+    y (Player _ _ _ _ _ f _ _) =
       f
-    z (Player a b c d e _ g) f =
-      Player a b c d e f g
+    z (Player a b c d e _ g h) f =
+      Player a b c d e f g h
 
 playerInertia :: Lens' Player Int16
 playerInertia =
   lens y z
   where
-    y (Player _ _ _ _ _ _ g) =
+    y (Player _ _ _ _ _ _ g _) =
       g
-    z (Player a b c d e f _) g =
-      Player a b c d e f g
+    z (Player a b c d e f _ h) g =
+      Player a b c d e f g h
+
+playerMode :: Lens' Player PlayerMode
+playerMode =
+  lens y z
+  where
+    y (Player _ _ _ _ _ _ _ h) =
+      h
+    z (Player a b c d e f g _) h =
+      Player a b c d e f g h
 
 moveRight :: (MonadState Player m) => m ()
 moveRight = do
@@ -169,24 +186,37 @@ pixels =
   lens f g
   where
     f (V2 a b) =
-      V2 (a ^. cIntHalves . _1)  (b ^. cIntHalves . _2)
+      V2 (a ^. cIntHalves . _1)  (b ^. cIntHalves . _1)
     g (V2 a b) (V2 x y) =
-      V2 (a & cIntHalves . _1 .~ x)  (b & cIntHalves . _2 .~ y)
+      V2 (a & cIntHalves . _1 .~ x)  (b & cIntHalves . _1 .~ y)
 
 jump :: (MonadState Player m) => m ()
 jump = do
   let
-    angle =
-      0
+    -- angle =
+    --   0
+    sine =
+      -256
+    jumpSpeed :: Int32
     jumpSpeed =
       0x680
-  -- cmpi.w  #6,d1  ; does Sonic have enough room to jump?
-  playerVelocity . _y += jumpSpeed `shiftR` 8
+    y =
+      (jumpSpeed * sine) `shiftR` 8
+    z =
+      fromIntegral y :: Int16
+  playerMode .= MdJump
+  playerVelocity . _y += z
+
+objectMoveAndFall :: (MonadState Player m) => m ()
+objectMoveAndFall = do
+  velocity <- use playerVelocity
+  playerVelocity . _y += 0x38
+  position += ((`shiftL` 8) . fromIntegral <$> velocity)
 
 objectMove :: (MonadState Player m) => m ()
 objectMove = do
   velocity <- use playerVelocity
-  position += ((`shiftL` 8) <$> velocity)
+  position += ((`shiftL` 8) . fromIntegral <$> velocity)
 
 normalTopSpeed :: Int16
 normalTopSpeed =

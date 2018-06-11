@@ -171,15 +171,24 @@ loadAndRun = do
           playerSprite' & position .~ (fromIntegral <$> (game ^. player . position . pixels))
         updateGame = do
           zoom player $ do
-            when jumpPressed jump
-            if rightPressed
-            then moveRight
-            else when leftPressed moveLeft
-            traction
-            when (not rightPressed && not leftPressed) settle
-            objectMove
-            radius <- use playerRadius
-            position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)
+            mode <- use playerMode
+            case mode of
+              MdNormal ->
+                if jumpPressed
+                then jump
+                else do
+                  if rightPressed
+                  then moveRight
+                  else when leftPressed moveLeft
+                  when (not rightPressed && not leftPressed) settle
+                  objectMove
+                  traction
+                  radius <- use playerRadius
+                  position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)
+              MdJump -> do
+                objectMoveAndFall
+                radius <- use playerRadius
+                position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)
           p' <- use (player . position . pixels)
           camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
