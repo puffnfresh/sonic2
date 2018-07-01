@@ -46,13 +46,24 @@ frameRate :: Double
 frameRate =
   60
 
-collideWithLevel :: [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> V2 Int16 -> V2 Int16 -> V2 Int16
-collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius p =
-  go $ p + gravity
-  where
+resetOnFloor :: ()
+resetOnFloor =
+  ()
+
+doLevelCollision :: ()
+doLevelCollision =
+  ()
+
+collideWithLevel :: (MonadState Player m) => [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> BoundedArray Word16 Word8 -> m ()
+collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = do
+  radius' <- use playerRadius
+  let
+    radius =
+       fromIntegral <$> radius'
     gravity =
       V2 0 4
-    go p' =
+    go = do
+      p' <- use (position . pixels)
       let
         V2 layoutX layoutY =
           (`div` 0x80) <$> p' + radius
@@ -60,24 +71,36 @@ collideWithLevel layout chunkBlocks reindexedCollisionBlocks radius p =
           layout !! fromIntegral layoutY !! fromIntegral layoutX
         V2 blockX blockY =
           ((`div` 0x10) . (`rem` 0x80)) <$> p' + radius
-        ChunkBlock blockIndex _ _ =
+        ChunkBlock blockIndex flipX flipY =
           (chunkBlocks ! chunkIndex) ! fromIntegral ((blockY * 8) + blockX)
         V2 pixelX pixelY =
           (`rem` 0x10) <$> p' + radius
         CollisionBlock heights =
           reindexedCollisionBlocks ! blockIndex
+        angle' =
+          (if flipX then complement else id) $ reindexedCurves ! blockIndex
         height =
-          fromMaybe 0 (heights ! fromIntegral pixelX)
+          let
+            x =
+              if flipX then 0xF - pixelX else pixelX
+          in fromMaybe 0 (heights ! fromIntegral x)
         heightDifference =
           (0x10 - pixelY) - (fromIntegral height + 2)
-      in if heightDifference < 0
-         then go (p' + V2 0 heightDifference)
-         else p'
+      when (heightDifference < 0) $ do
+        position . pixels += V2 0 heightDifference
+        playerAngle .= angle'
+        statuses . mdAir .= MdAirOff
+        statuses . mdRoll .= MdRollOff
+        go
+  position . pixels += gravity
+  go
 
 loadAndRun :: (MonadReader Game m, MonadError SonicError m, MonadIO m) => m ()
 loadAndRun = do
   sonicMappings <- loadSpriteMappings sonicOffsets
   tailsMappings <- loadSpriteMappings tailsOffsets
+
+  curves <- listArrayFill 0 . BS.unpack <$> sliceRom curveAndResistanceMapping
 
   sonicAnimationScript <- loadAnimation . BS.unpack <$> sliceRom animationSonicWait
   tailsAnimationScript <- loadAnimation . BS.unpack <$> sliceRom animationTailsWait
@@ -109,6 +132,7 @@ loadAndRun = do
 
   let reindexedCollisionTextures = (collisionBlockTextures !) <$> collisionIndex
       reindexedCollisionBlocks = (collisionBlocks !) <$> collisionIndex
+      reindexedCurves = (curves !) <$> collisionIndex
 
   now <- liftIO getCurrentTime
   chunksContent <- decompressFile $ levelChunksOffset offsets
@@ -171,28 +195,27 @@ loadAndRun = do
           playerSprite' & position .~ (fromIntegral <$> (game ^. player . position . pixels))
         updateGame = do
           zoom player $ do
-            mode <- use playerMode
-            case mode of
-              MdNormal ->
-                if jumpPressed
-                then jump
-                else do
-                  if rightPressed
-                  then moveRight
-                  else when leftPressed moveLeft
-                  when (not rightPressed && not leftPressed) settle
-                  objectMove
-                  traction
-                  radius <- use playerRadius
-                  position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)
-              MdJump -> do
-                objectMoveAndFall
-                radius <- use playerRadius
-                position . pixels %= collideWithLevel layout chunkBlocks reindexedCollisionBlocks (fromIntegral <$> radius)
+            s <- use statuses
+            if isJumping s
+            then do
+              objectMoveAndFall
+              collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
+            else
+              if jumpPressed
+              then jump
+              else do
+                if rightPressed
+                then moveRight
+                else when leftPressed moveLeft
+                when (not rightPressed && not leftPressed) settle
+                objectMove
+                traction
+                collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
           p' <- use (player . position . pixels)
           camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
           execState updateGame game
+      liftIO . print $ game' ^. player . playerAngle
       -- liftIO . print $ game' ^. player . playerInertia
       -- liftIO . print $ game' ^. player . playerVelocity
       -- liftIO . print $ game' ^. player . position
@@ -200,7 +223,7 @@ loadAndRun = do
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
       render layoutChunkTextures (game' ^. camera)
-      -- render collisionTextures o' p'
+      -- render collisionTextures (game' ^. camera)
       runReaderT (renderSprite playerSprite'') game'
       present r
       -- endTicks <- ticks
@@ -219,5 +242,5 @@ main = do
   renderer' <- createRenderer window (-1) defaultRenderer
   rendererLogicalSize renderer' $= Just (V2 320 224)
 
-  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) normalTopSpeed normalAcceleration normalDeceleration 0)
+  e <- runReaderT (runExceptT loadAndRun) (Game renderer' 0 rom' $ Player (V2 0 0) (V2 0 0) (V2 0 0x13) normalTopSpeed normalAcceleration normalDeceleration 0 0 initialStatuses)
   either print pure e

@@ -15,6 +15,10 @@ paletteEhz :: Offset
 paletteEhz =
   Offset 0x2A22 0x2A82
 
+curveAndResistanceMapping :: Offset
+curveAndResistanceMapping =
+  Offset 0x42D50 0x42E50
+
 collisionArray1 :: Offset
 collisionArray1 =
   Offset 0x42E50 0x43E50

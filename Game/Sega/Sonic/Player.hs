@@ -3,15 +3,22 @@
 
 module Game.Sega.Sonic.Player (
   Player(..)
-, PlayerMode(..)
+, Statuses(..)
+, MdAir(..)
+, MdRoll(..)
 , HasPosition(..)
+, mdAir
+, mdRoll
 , playerVelocity
 , playerRadius
 , playerTopSpeed
 , playerAcceleration
 , playerDeceleration
 , playerInertia
-, playerMode
+, playerAngle
+, initialStatuses
+, isJumping
+, statuses
 , jump
 , moveRight
 , moveLeft
@@ -33,90 +40,135 @@ import           Control.Monad.State
 import           Data.Bits
 import           Data.Halves           (finiteBitHalves)
 import           Data.Int
+import           Data.Word             (Word8)
 import           Foreign.C.Types
 import           Game.Sega.Sonic.Types
 import           SDL
 
 data Player
-  = Player (V2 CInt) (V2 Int16) (V2 CInt) Int16 Int16 Int16 Int16 PlayerMode
+  = Player (V2 CInt) (V2 Int16) (V2 CInt) Int16 Int16 Int16 Int16 Word8 Statuses
   deriving (Eq, Ord, Show)
 
-data PlayerMode
-  = MdNormal
-  | MdJump
+data Statuses
+  = Statuses MdAir MdRoll
+  deriving (Eq, Ord, Show)
+
+initialStatuses :: Statuses
+initialStatuses =
+  Statuses MdAirOff MdRollOff
+
+mdAir :: Lens' Statuses MdAir
+mdAir =
+  lens f g
+  where
+    f (Statuses a _) =
+      a
+    g (Statuses _ b) a =
+      Statuses a b
+
+mdRoll :: Lens' Statuses MdRoll
+mdRoll =
+  lens f g
+  where
+    f (Statuses _ b) =
+      b
+    g (Statuses a _) b =
+      Statuses a b
+
+isJumping :: Statuses -> Bool
+isJumping s =
+  s ^. mdAir == MdAirOn && s ^. mdRoll == MdRollOn
+
+data MdAir
+  = MdAirOn
+  | MdAirOff
+  deriving (Eq, Ord, Show)
+
+data MdRoll
+  = MdRollOn
+  | MdRollOff
   deriving (Eq, Ord, Show)
 
 instance HasPosition Player where
   position =
     lens y z
     where
-      y (Player a _ _ _ _ _ _ _) =
+      y (Player a _ _ _ _ _ _ _ _) =
         a
-      z (Player _ b c d e f g h) a =
-        Player a b c d e f g h
+      z (Player _ b c d e f g h i) a =
+        Player a b c d e f g h i
 
 playerVelocity :: Lens' Player (V2 Int16)
 playerVelocity =
   lens y z
   where
-    y (Player _ b _ _ _ _ _ _) =
+    y (Player _ b _ _ _ _ _ _ _) =
       b
-    z (Player a _ c d e f g h) b =
-      Player a b c d e f g h
+    z (Player a _ c d e f g h i) b =
+      Player a b c d e f g h i
 
 playerRadius :: Lens' Player (V2 CInt)
 playerRadius =
   lens y z
   where
-    y (Player _ _ c _ _ _ _ _) =
+    y (Player _ _ c _ _ _ _ _ _) =
       c
-    z (Player a b _ d e f g h) c =
-      Player a b c d e f g h
+    z (Player a b _ d e f g h i) c =
+      Player a b c d e f g h i
 
 playerTopSpeed :: Lens' Player Int16
 playerTopSpeed =
   lens y z
   where
-    y (Player _ _ _ d _ _ _ _) =
+    y (Player _ _ _ d _ _ _ _ _) =
       d
-    z (Player a b c _ e f g h) d =
-      Player a b c d e f g h
+    z (Player a b c _ e f g h i) d =
+      Player a b c d e f g h i
 
 playerAcceleration :: Lens' Player Int16
 playerAcceleration =
   lens y z
   where
-    y (Player _ _ _ _ e _ _ _) =
+    y (Player _ _ _ _ e _ _ _ _) =
       e
-    z (Player a b c d _ f g h) e =
-      Player a b c d e f g h
+    z (Player a b c d _ f g h i) e =
+      Player a b c d e f g h i
 
 playerDeceleration :: Lens' Player Int16
 playerDeceleration =
   lens y z
   where
-    y (Player _ _ _ _ _ f _ _) =
+    y (Player _ _ _ _ _ f _ _ _) =
       f
-    z (Player a b c d e _ g h) f =
-      Player a b c d e f g h
+    z (Player a b c d e _ g h i) f =
+      Player a b c d e f g h i
 
 playerInertia :: Lens' Player Int16
 playerInertia =
   lens y z
   where
-    y (Player _ _ _ _ _ _ g _) =
+    y (Player _ _ _ _ _ _ g _ _) =
       g
-    z (Player a b c d e f _ h) g =
-      Player a b c d e f g h
+    z (Player a b c d e f _ h i) g =
+      Player a b c d e f g h i
 
-playerMode :: Lens' Player PlayerMode
-playerMode =
+playerAngle :: Lens' Player Word8
+playerAngle =
   lens y z
   where
-    y (Player _ _ _ _ _ _ _ h) =
+    y (Player _ _ _ _ _ _ _ h _) =
       h
-    z (Player a b c d e f g _) h =
-      Player a b c d e f g h
+    z (Player a b c d e f g _ i) h =
+      Player a b c d e f g h i
+
+statuses :: Lens' Player Statuses
+statuses =
+  lens y z
+  where
+    y (Player _ _ _ _ _ _ _ _ i) =
+      i
+    z (Player a b c d e f g h _) i =
+      Player a b c d e f g h i
 
 moveRight :: (MonadState Player m) => m ()
 moveRight = do
@@ -204,7 +256,8 @@ jump = do
       (jumpSpeed * sine) `shiftR` 8
     z =
       fromIntegral y :: Int16
-  playerMode .= MdJump
+  statuses . mdAir .= MdAirOn
+  statuses . mdRoll .= MdRollOn
   playerVelocity . _y += z
 
 objectMoveAndFall :: (MonadState Player m) => m ()
