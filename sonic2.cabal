@@ -20,6 +20,7 @@ executable sonic2
                      , Game.Sega.Sonic.Offsets
                      , Game.Sega.Sonic.Palette
                      , Game.Sega.Sonic.Player
+                     , Game.Sega.Sonic.Sine
                      , Game.Sega.Sonic.SpriteMappings
                      , Game.Sega.Sonic.Sprites
                      , Game.Sega.Sonic.Tiles

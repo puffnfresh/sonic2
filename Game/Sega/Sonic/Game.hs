@@ -15,7 +15,7 @@ import           Control.Lens
 import           Control.Monad.Reader
 import qualified Data.ByteString         as BS
 import           Foreign.C.Types
-import           Game.Sega.Sonic.Offsets
+import           Game.Sega.Sonic.Offsets as Offsets
 import           Game.Sega.Sonic.Player
 import           SDL
 

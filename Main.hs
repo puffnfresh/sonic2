@@ -26,9 +26,10 @@ import           Game.Sega.Sonic.Collision
 import           Game.Sega.Sonic.Error
 import           Game.Sega.Sonic.Game
 import           Game.Sega.Sonic.Layout
-import           Game.Sega.Sonic.Offsets
+import           Game.Sega.Sonic.Offsets        as Offsets
 import           Game.Sega.Sonic.Palette
 import           Game.Sega.Sonic.Player
+import           Game.Sega.Sonic.Sine
 import           Game.Sega.Sonic.SpriteMappings
 import           Game.Sega.Sonic.Sprites
 import           Game.Sega.Sonic.Tiles
@@ -79,13 +80,12 @@ collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = d
           reindexedCollisionBlocks ! blockIndex
         angle' =
           (if flipX then complement else id) $ reindexedCurves ! blockIndex
+        flip' flag n =
+          if flag then 0xF - n else n
         height =
-          let
-            x =
-              if flipX then 0xF - pixelX else pixelX
-          in fromMaybe 0 (heights ! fromIntegral x)
+          fromMaybe 0 (heights ! fromIntegral (flip' flipX pixelX))
         heightDifference =
-          (0x10 - pixelY) - (fromIntegral height + 2)
+          (0x10 - flip' flipY pixelY) - (fromIntegral height + 2)
       when (heightDifference < 0) $ do
         position . pixels += V2 0 heightDifference
         playerAngle .= angle'
@@ -141,6 +141,8 @@ loadAndRun = do
   chunksTextures <- traverse (loadChunkTexture reindexedCollisionTextures) chunksBlocks
   now' <- liftIO getCurrentTime
   liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
+
+  sineData' <- SineData . listArrayFill 0 . fmap fromIntegral . view (unpackedBytes . collectHalves) <$> sliceRom Offsets.sineData
 
   let collisionTextures = mapChunkTextures chunksTextures layout
 
@@ -202,7 +204,7 @@ loadAndRun = do
               collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
             else
               if jumpPressed
-              then jump
+              then runReaderT jump sineData'
               else do
                 if rightPressed
                 then moveRight
@@ -215,7 +217,7 @@ loadAndRun = do
           camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
           execState updateGame game
-      liftIO . print $ game' ^. player . playerAngle
+      -- liftIO . print $ game' ^. player . playerAngle
       -- liftIO . print $ game' ^. player . playerInertia
       -- liftIO . print $ game' ^. player . playerVelocity
       -- liftIO . print $ game' ^. player . position
@@ -236,7 +238,6 @@ loadAndRun = do
 main :: IO ()
 main = do
   rom' <- BS.readFile "sonic2.md"
-  let
 
   window <- createWindow "Sonic 2" defaultWindow { windowInitialSize = V2 320 224 }
   renderer' <- createRenderer window (-1) defaultRenderer

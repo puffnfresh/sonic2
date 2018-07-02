@@ -7,6 +7,10 @@ data Offset
   = Offset Word32 Word32
   deriving (Eq, Ord, Show)
 
+sineData :: Offset
+sineData =
+  Offset 0x33CE 0x364E
+
 paletteSonic :: Offset
 paletteSonic =
   Offset 0x29E2 0x2A02

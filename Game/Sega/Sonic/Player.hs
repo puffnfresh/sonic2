@@ -36,12 +36,14 @@ module Game.Sega.Sonic.Player (
 ) where
 
 import           Control.Lens
+import           Control.Monad.Reader  (MonadReader)
 import           Control.Monad.State
 import           Data.Bits
 import           Data.Halves           (finiteBitHalves)
 import           Data.Int
 import           Data.Word             (Word8)
 import           Foreign.C.Types
+import           Game.Sega.Sonic.Sine
 import           Game.Sega.Sonic.Types
 import           SDL
 
@@ -242,23 +244,24 @@ pixels =
     g (V2 a b) (V2 x y) =
       V2 (a & cIntHalves . _1 .~ x)  (b & cIntHalves . _1 .~ y)
 
-jump :: (MonadState Player m) => m ()
+jump :: (HasSineData a, MonadReader a m, MonadState Player m) => m ()
 jump = do
+  angle' <- use playerAngle
+  (sine, cosine) <- calcSine (angle' - 0x40)
   let
-    -- angle =
-    --   0
-    sine =
-      -256
     jumpSpeed :: Int32
     jumpSpeed =
       0x680
+    x :: Int16
+    x =
+      fromIntegral $ (jumpSpeed * fromIntegral cosine) `shiftR` 8
+    y :: Int16
     y =
-      (jumpSpeed * sine) `shiftR` 8
-    z =
-      fromIntegral y :: Int16
+      fromIntegral $ (jumpSpeed * fromIntegral sine) `shiftR` 8
   statuses . mdAir .= MdAirOn
   statuses . mdRoll .= MdRollOn
-  playerVelocity . _y += z
+  playerVelocity . _x += x
+  playerVelocity . _y += y
 
 objectMoveAndFall :: (MonadState Player m) => m ()
 objectMoveAndFall = do
