@@ -19,6 +19,7 @@ module Game.Sega.Sonic.Player (
 , initialStatuses
 , isJumping
 , statuses
+, resetOnFloor
 , jump
 , moveRight
 , moveLeft
@@ -46,6 +47,8 @@ import           Foreign.C.Types
 import           Game.Sega.Sonic.Sine
 import           Game.Sega.Sonic.Types
 import           SDL
+
+import           Debug.Trace
 
 data Player
   = Player (V2 CInt) (V2 Int16) (V2 CInt) Int16 Int16 Int16 Int16 Word8 Statuses
@@ -273,6 +276,11 @@ objectMove :: (MonadState Player m) => m ()
 objectMove = do
   velocity <- use playerVelocity
   position += ((`shiftL` 8) . fromIntegral <$> velocity)
+
+resetOnFloor :: (MonadState Player m) => m ()
+resetOnFloor = do
+  statuses . mdAir .= MdAirOff
+  statuses . mdRoll .= MdRollOff
 
 normalTopSpeed :: Int16
 normalTopSpeed =

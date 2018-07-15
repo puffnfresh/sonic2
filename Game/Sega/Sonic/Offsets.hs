@@ -11,6 +11,10 @@ sineData :: Offset
 sineData =
   Offset 0x33CE 0x364E
 
+angleData :: Offset
+angleData =
+  Offset 0x36B4 0X37B6
+
 paletteSonic :: Offset
 paletteSonic =
   Offset 0x29E2 0x2A02

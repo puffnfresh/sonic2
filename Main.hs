@@ -47,13 +47,36 @@ frameRate :: Double
 frameRate =
   60
 
-resetOnFloor :: ()
-resetOnFloor =
-  ()
+findWall  :: (Applicative m) => m ()
+findWall =
+  pure ()
 
-doLevelCollision :: ()
-doLevelCollision =
-  ()
+checkLeftWallDist  :: (Applicative m) => m ()
+checkLeftWallDist =
+  pure ()
+
+hitLeftWall :: (Applicative m) => m ()
+hitLeftWall =
+  pure ()
+
+hitCeilingAndWalls :: (Applicative m) => m ()
+hitCeilingAndWalls =
+  pure ()
+
+hitRightWall :: (Applicative m) => m ()
+hitRightWall =
+  pure ()
+
+doLevelCollision :: (HasAngleData g, MonadReader g m, MonadState Player m) => m ()
+doLevelCollision = do
+  -- TODO: Check left/right/bottom solid bit
+  v <- use playerVelocity
+  a <- calcAngle v
+  case (a - 0x20) .&. 0xC0 of
+    0x40 -> hitLeftWall
+    0x80 -> hitCeilingAndWalls
+    0xC0 -> hitRightWall
+    _    -> pure ()
 
 collideWithLevel :: (MonadState Player m) => [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> BoundedArray Word16 Word8 -> m ()
 collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = do
@@ -89,8 +112,7 @@ collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = d
       when (heightDifference < 0) $ do
         position . pixels += V2 0 heightDifference
         playerAngle .= angle'
-        statuses . mdAir .= MdAirOff
-        statuses . mdRoll .= MdRollOff
+        resetOnFloor
         go
   position . pixels += gravity
   go
@@ -143,6 +165,7 @@ loadAndRun = do
   liftIO . putStrLn $ "Chunks loaded in " <> show (diffUTCTime now' now)
 
   sineData' <- SineData . listArrayFill 0 . fmap fromIntegral . view (unpackedBytes . collectHalves) <$> sliceRom Offsets.sineData
+  angleData' <- AngleData . listArrayFill 0 . fmap fromIntegral . view (unpackedBytes . collectHalves) <$> sliceRom Offsets.angleData
 
   let collisionTextures = mapChunkTextures chunksTextures layout
 

@@ -36,6 +36,7 @@ executable sonic2
                      , halves
                      , kosinski
                      , lens
+                     , linear
                      , megadrive-palette
                      , sdl2
                      , split
