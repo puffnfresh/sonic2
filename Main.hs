@@ -102,7 +102,7 @@ collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = d
         CollisionBlock heights =
           reindexedCollisionBlocks ! blockIndex
         angle' =
-          (if flipX then complement else id) $ reindexedCurves ! blockIndex
+          (if flipX then negate else id) $ reindexedCurves ! blockIndex
         flip' flag n =
           if flag then 0xF - n else n
         height =
