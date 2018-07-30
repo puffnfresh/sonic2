@@ -3,6 +3,7 @@
 
 module Game.Sega.Sonic.Player (
   Player(..)
+, HasPlayer(..)
 , Statuses(..)
 , MdAir(..)
 , MdRoll(..)
@@ -53,6 +54,13 @@ import           Debug.Trace
 data Player
   = Player (V2 CInt) (V2 Int16) (V2 CInt) Int16 Int16 Int16 Int16 Word8 Statuses
   deriving (Eq, Ord, Show)
+
+class HasPlayer a where
+  player :: Lens' a Player
+
+instance HasPlayer Player where
+  player =
+    id
 
 data Statuses
   = Statuses MdAir MdRoll
@@ -214,7 +222,7 @@ settleLeft :: (MonadState Player m) => m ()
 settleLeft = do
   playerInertia %= \i -> min 0 (i + 0xC)
 
-traction :: (MonadState Player m) => m ()
+traction :: (HasPlayer s, MonadState s m) => m ()
 traction = do
   -- let
   --   angle =
@@ -223,7 +231,7 @@ traction = do
   --     256
   --   sine =
   --     0
-  inertia <- use playerInertia
+  inertia <- use (player . playerInertia)
   -- let
   --   x =
   --     (inertia * cosine) `shiftR` 8
@@ -232,7 +240,7 @@ traction = do
   --   v =
   --     V2 (fromIntegral x) (fromIntegral y)
   -- playerVelocity .= v
-  playerVelocity .= V2 (fromIntegral inertia) 0
+  player . playerVelocity .= V2 (fromIntegral inertia) 0
 
 cIntHalves :: Iso' CInt (Int16, Int16)
 cIntHalves =
@@ -277,10 +285,10 @@ objectMove = do
   velocity <- use playerVelocity
   position += ((`shiftL` 8) . fromIntegral <$> velocity)
 
-resetOnFloor :: (MonadState Player m) => m ()
+resetOnFloor :: (HasPlayer s, MonadState s m) => m ()
 resetOnFloor = do
-  statuses . mdAir .= MdAirOff
-  statuses . mdRoll .= MdRollOff
+  player . statuses . mdAir .= MdAirOff
+  player . statuses . mdRoll .= MdRollOff
 
 normalTopSpeed :: Int16
 normalTopSpeed =

@@ -36,6 +36,9 @@ import           Game.Sega.Sonic.Tiles
 import           SDL
 import           Sega.MegaDrive.Palette
 
+import           Numeric
+
+
 decompressFile :: (HasRom g, MonadReader g m, MonadError SonicError m, MonadIO m) => Offset -> m BS.ByteString
 decompressFile offset = do
   maybeContent <- Kosinski.compressed <$> sliceRom offset
@@ -47,30 +50,208 @@ frameRate :: Double
 frameRate =
   60
 
-findWall  :: (Applicative m) => m ()
-findWall =
-  pure ()
+class HasLevel s where
+  layout :: s -> [[Word8]]
+  chunkBlocks :: s -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock)
 
-checkLeftWallDist  :: (Applicative m) => m ()
-checkLeftWallDist =
-  pure ()
+findTile :: (HasLevel s, MonadReader s m) => V2 CInt -> m Word16
+findTile p = do
+  layout' <- asks layout
+  chunkBlocks' <- asks chunkBlocks
+  let
+    p' =
+      p ^. pixels
+    V2 layoutX layoutY =
+      (`div` 0x80) <$> p'
+    chunkIndex =
+      layout' !! fromIntegral layoutY !! fromIntegral layoutX
+    V2 blockX blockY =
+      ((`div` 0x10) . (`rem` 0x80)) <$> p'
+    ChunkBlock blockIndex _ _ =
+      (chunkBlocks' ! chunkIndex) ! fromIntegral ((blockY * 8) + blockX)
+  pure blockIndex
 
-hitLeftWall :: (Applicative m) => m ()
-hitLeftWall =
-  pure ()
+data WallDist
+  = WallDist Word16 CInt Word8
+  deriving (Eq, Ord, Show)
 
-hitCeilingAndWalls :: (Applicative m) => m ()
-hitCeilingAndWalls =
-  pure ()
+-- Scans horizontally for up to 2 16x16 blocks to find solid walls.
+-- d2 = y_pos
+-- d3 = x_pos
+-- d5 = ($c,$d) or ($e,$f) - solidity type bit (L/R/B or top)
+-- d6 = $0000 for no flip, $0400 for horizontal flip
+-- a3 = delta-x for next location to check if current one is empty
+-- a4 = pointer to angle buffer
+-- returns relevant block ID in (a1)
+-- returns distance to left/right in d1
+-- returns angle in (a4)
+findWall :: (HasLevel s, MonadReader s m) => V2 CInt -> CInt -> m WallDist
+findWall p delta = do
+  blockIndex <- findTile p
+  if blockIndex .&. 0x3FFF == 0
+  then do
+    WallDist a1 d1 a4 <- findWall2 (p & _x +~ delta)
+    -- dist & distance +~ 0x10
+    pure $ WallDist a1 (d1 + 0x10) a4
+  else do
+    let
+      d1 =
+        0
+      a4 =
+        0
+    pure $ WallDist blockIndex d1 a4
 
-hitRightWall :: (Applicative m) => m ()
-hitRightWall =
-  pure ()
+findWall2 :: (HasLevel s, MonadReader s m) => V2 CInt -> m WallDist
+findWall2 p = do
+  blockIndex <- (.&. 0x3FFF) <$> findTile p
+  if blockIndex == 0
+  then do
+    let
+      d1 =
+        0xF - (p ^. _x .&. 0xF)
+    pure $ WallDist blockIndex d1 0
+  else do
+    let
+      d1 =
+        0
+      a4 =
+        0
+    pure $ WallDist blockIndex d1 a4
 
-doLevelCollision :: (HasAngleData g, MonadReader g m, MonadState Player m) => m ()
+findFloor :: (HasLevel s, MonadReader s m) => V2 CInt -> CInt -> m WallDist
+findFloor p delta = do
+  blockIndex <- (.&. 0x3FFF) <$> findTile p
+  if blockIndex == 0
+  then do
+    WallDist a1 d1 a4 <- findFloor2 (p & _y +~ delta)
+    -- dist & distance +~ 0x10
+    pure $ WallDist a1 (d1 + 0x10) a4
+  else do
+    let
+      d1 =
+        0
+      a4 =
+        0
+    pure $ WallDist blockIndex d1 a4
+
+findFloor2 :: (HasLevel s, MonadReader s m) => V2 CInt -> m WallDist
+findFloor2 p = do
+  blockIndex <- (.&. 0x3FFF) <$> findTile p
+  if blockIndex == 0
+  then do
+    let
+      d1 =
+        0xF - (p ^. _y .&. 0xF)
+    pure $ WallDist blockIndex d1 0
+  else do
+    let
+      d1 =
+        0
+      a4 =
+        0
+    pure $ WallDist blockIndex d1 a4
+
+-- Checks a 16x16 block to find solid walls. May check an additional
+-- 16x16 block up for walls.
+-- d5 = ($c,$d) or ($e,$f) - solidity type bit (L/R/B or top)
+-- returns relevant block ID in (a1)
+-- returns distance in d1
+-- returns angle in d3, or zero if angle was odd
+checkLeftWallDist :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m WallDist
+checkLeftWallDist = do
+  p <- use (player . position)
+  findWall p (-0x10)
+
+checkRightWallDist :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m WallDist
+checkRightWallDist = do
+  p <- use (player . position)
+  findWall p (0x10)
+
+checkCeiling :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m WallDist
+checkCeiling =
+  pure $ WallDist 0 0 0
+
+checkFloor :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m WallDist
+checkFloor =
+  pure $ WallDist 0 0 0
+
+hitLeftWall :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m ()
+hitLeftWall = do
+  WallDist _ d1 _ <- checkLeftWallDist
+  if d1 >= 0
+  then hitCeiling
+  else do
+    player . position . _x -= d1
+    player . playerVelocity . _x .= 0
+    y_vel <- use (player . playerVelocity . _y)
+    player . playerInertia .= y_vel
+
+hitCeiling :: (HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
+hitCeiling = do
+  WallDist _ d1 _ <- checkCeiling
+  if d1 >= 0
+  then hitFloor
+  else do
+    player . position . _y -= d1
+    y_vel <- use (player . playerVelocity . _y)
+    when (y_vel < 0) $
+      player . playerVelocity . _y .= 0
+
+hitFloor :: (HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
+hitFloor = do
+  y_vel <- use (player . playerVelocity . _y)
+  unless (y_vel < 0) $ do
+    WallDist _ d1 d3 <- checkFloor
+    when (d1 < 0) $ do
+      player . position . _y += d1
+      player . playerAngle .= d3
+      resetOnFloor
+      player . playerVelocity . _y .= 0
+      x_vel <- use (player . playerVelocity . _x)
+      player . playerInertia .= x_vel
+
+hitCeilingAndWalls :: (HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
+hitCeilingAndWalls = do
+  WallDist _ d1 _ <- checkLeftWallDist
+  when (d1 < 0) $ do
+    player . position . _x -= d1
+    player . playerVelocity . _x .= 0
+
+  WallDist _ d1' _ <- checkRightWallDist
+  when (d1' < 0) $ do
+    player . position . _x += d1
+    player . playerVelocity . _x .= 0
+
+  WallDist _ d1'' d3 <- checkCeiling
+  when (d1'' < 0) $ do
+    player . position . _y -= d1''
+    let d0 = (d3 + 0x20) .&. 0x40
+    if (d0 /= 0)
+    then do
+      player . playerAngle .= d3
+      resetOnFloor
+      y_vel <- use (player . playerVelocity . _y)
+      player . playerInertia .= y_vel
+      inertia <- use (player . playerInertia)
+      unless (d3 < 0) $
+        player . playerInertia .= (-inertia)
+    else player . playerVelocity . _y .= 0;
+
+hitRightWall :: (HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
+hitRightWall = do
+  WallDist _ d1 _ <- checkRightWallDist
+  if d1 >= 0
+  then hitCeiling
+  else do
+    player . position . _x += d1
+    player . playerVelocity . _x .= 0
+    y_vel <- use (player . playerVelocity . _y)
+    player . playerInertia .= y_vel
+
+doLevelCollision :: (HasAngleData g, HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
 doLevelCollision = do
   -- TODO: Check left/right/bottom solid bit
-  v <- use playerVelocity
+  v <- use (player . playerVelocity)
   a <- calcAngle v
   case (a - 0x20) .&. 0xC0 of
     0x40 -> hitLeftWall
@@ -240,6 +421,9 @@ loadAndRun = do
           camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
           execState updateGame game
+
+      -- let v = game' ^. player . playerVelocity
+      -- liftIO . putStrLn . ("0x" ++) $ showHex (runReader (calcAngle (v ^. _x) (v ^. _y)) angleData') ""
       -- liftIO . print $ game' ^. player . playerAngle
       -- liftIO . print $ game' ^. player . playerInertia
       -- liftIO . print $ game' ^. player . playerVelocity

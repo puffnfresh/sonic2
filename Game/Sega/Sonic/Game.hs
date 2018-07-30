@@ -58,9 +58,6 @@ instance HasRom Game where
       g (Game a b _ d) c =
         Game a b c d
 
-class HasPlayer a where
-  player :: Lens' a Player
-
 instance HasPlayer Game where
   player =
     lens f g
