@@ -37,7 +37,7 @@ import           SDL
 import           Sega.MegaDrive.Palette
 
 import           Numeric
-
+import           Debug.Trace
 
 decompressFile :: (HasRom g, MonadReader g m, MonadError SonicError m, MonadIO m) => Offset -> m BS.ByteString
 decompressFile offset = do
@@ -53,6 +53,19 @@ frameRate =
 class HasLevel s where
   layout :: s -> [[Word8]]
   chunkBlocks :: s -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock)
+
+data LevelData
+  = LevelData AngleData [[Word8]] (BoundedArray Word8 (BoundedArray Word8 ChunkBlock))
+
+instance HasAngleData LevelData where
+  angleData (LevelData a _ _) =
+    a
+
+instance HasLevel LevelData where
+  layout (LevelData _ a _) =
+    a
+  chunkBlocks (LevelData _ _ a) =
+    a
 
 findTile :: (HasLevel s, MonadReader s m) => V2 CInt -> m Word16
 findTile p = do
@@ -168,16 +181,19 @@ checkRightWallDist = do
   findWall p (0x10)
 
 checkCeiling :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m WallDist
-checkCeiling =
-  pure $ WallDist 0 0 0
+checkCeiling = do
+  p <- use (player . position)
+  findFloor p (-0x10)
 
 checkFloor :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m WallDist
-checkFloor =
-  pure $ WallDist 0 0 0
+checkFloor = do
+  p <- use (player . position)
+  findFloor p 0x10
 
 hitLeftWall :: (HasLevel r, MonadReader r m, HasPlayer s, MonadState s m) => m ()
 hitLeftWall = do
   WallDist _ d1 _ <- checkLeftWallDist
+  traceShow ("hitLeftWall", d1) $ pure ()
   if d1 >= 0
   then hitCeiling
   else do
@@ -189,6 +205,7 @@ hitLeftWall = do
 hitCeiling :: (HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
 hitCeiling = do
   WallDist _ d1 _ <- checkCeiling
+  traceShow ("hitCeiling", d1) $ pure ()
   if d1 >= 0
   then hitFloor
   else do
@@ -202,6 +219,7 @@ hitFloor = do
   y_vel <- use (player . playerVelocity . _y)
   unless (y_vel < 0) $ do
     WallDist _ d1 d3 <- checkFloor
+    traceShow ("hitFloor", d1) $ pure ()
     when (d1 < 0) $ do
       player . position . _y += d1
       player . playerAngle .= d3
@@ -240,6 +258,7 @@ hitCeilingAndWalls = do
 hitRightWall :: (HasLevel g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
 hitRightWall = do
   WallDist _ d1 _ <- checkRightWallDist
+  traceShow ("hitRightWall", d1) $ pure ()
   if d1 >= 0
   then hitCeiling
   else do
@@ -253,11 +272,111 @@ doLevelCollision = do
   -- TODO: Check left/right/bottom solid bit
   v <- use (player . playerVelocity)
   a <- calcAngle v
+  traceShow ("doLevelCollision", (a - 0x20) .&. 0xC0) $ pure ()
   case (a - 0x20) .&. 0xC0 of
     0x40 -> hitLeftWall
     0x80 -> hitCeilingAndWalls
     0xC0 -> hitRightWall
-    _    -> pure ()
+    _    -> do
+      WallDist _ d1 _ <- checkLeftWallDist
+      when (d1 < 0) $ do
+        -- p->x_pos -= d1;
+        -- p->x_vel = 0;
+        traceShow "TODO" $ pure ()
+
+      WallDist _ d1' _ <- checkLeftWallDist
+      when (d1' < 0) $ do
+        -- p->x_pos += d1;
+        -- p->x_vel = 0;
+        traceShow "TODO" $ pure ()
+
+      WallDist _ d1'' d3 <- checkFloor
+      unless (d1'' < 0) $ do
+        v <- use (player . playerVelocity)
+        -- let d2 = negate ((v ^. _y `shiftR` 8) + 8)
+        player . position . _y += d1''
+        player . playerAngle .= d3
+        resetOnFloor
+        -- d0 = (d3 + 0x10) & 0x20;
+        -- if((char)d0 == 0)
+        -- 	goto loc_1AF5A;
+        -- if(p->y_vel < 0){	// p->y_vel /= 2; -- DONE THIS WAY FOR ACCURACY
+        -- 	p->y_vel >>= 1;
+        -- 	p->y_vel |= 0x80000000;
+        -- }
+        -- else
+        -- 	p->y_vel >>= 1;
+        -- goto loc_1AF7C;
+
+-- Subroutine to change Sonic's angle as he walks along the floor
+sonicAngle :: (Applicative m) => Word8 -> m ()
+sonicAngle _ =
+  pure ()
+
+anglePos :: (HasLevel g, HasAngleData g, MonadReader g m, HasPlayer s, MonadState s m) => m ()
+anglePos = do
+  -- unless onobject
+  a <- use (player . playerAngle)
+  let
+    a' =
+      if a + 0x20 >= 0
+      then (if a < 0 then a + 1 else a) + 0x1F
+      else error "angle pos 1"
+
+  case (a' + 0x20) .&. 0xC0 of
+    0x40 -> pure ()
+    0x80 -> pure ()
+    0xC0 -> pure ()
+    _    -> do
+      p <- use (player . position)
+      r <- use (player . playerRadius)
+      WallDist _ d1 a4 <- findFloor (p + r) 0x10
+      sonicAngle a4
+      unless (d1 == 0) $ do
+        if d1 >= 0
+        then do
+          v <- use (player . playerVelocity)
+          let d0 = min 0xE (abs (v ^. _x `shiftR` 8) + 4)
+          if d1 > fromIntegral d0
+          then player . statuses . mdAir .= MdAirOn
+            -- player . status &= 0xDF
+            -- pure ()
+          else player . position . _y += d1
+        else
+          unless (d1 < (-0xE)) $
+            player . position . _y += d1
+
+x :: (HasLevel g, MonadReader g m) => V2 CInt -> m WallDist
+x p = do
+  l <- asks layout
+  c <- asks chunkBlocks
+  let
+    reindexedCollisionBlocks =
+      undefined
+    reindexedCurves =
+      undefined
+
+    V2 layoutX layoutY =
+      (`div` 0x80) <$> p
+    chunkIndex =
+      l !! fromIntegral layoutY !! fromIntegral layoutX
+    V2 blockX blockY =
+      ((`div` 0x10) . (`rem` 0x80)) <$> p
+    ChunkBlock blockIndex flipX flipY =
+      (c ! chunkIndex) ! fromIntegral ((blockY * 8) + blockX)
+    V2 pixelX pixelY =
+      (`rem` 0x10) <$> p
+    CollisionBlock heights =
+      reindexedCollisionBlocks ! blockIndex
+    angle' =
+      (if flipX then negate else id) $ reindexedCurves ! blockIndex
+    flip' flag n =
+      if flag then 0xF - n else n
+    height =
+      fromMaybe 0 (heights ! fromIntegral (flip' flipX pixelX))
+    heightDifference =
+      (0x10 - flip' flipY pixelY) - (fromIntegral height + 2)
+  pure $ WallDist blockIndex heightDifference angle'
 
 collideWithLevel :: (MonadState Player m) => [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> BoundedArray Word16 Word8 -> m ()
 collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = do
@@ -348,7 +467,9 @@ loadAndRun = do
   sineData' <- SineData . listArrayFill 0 . fmap fromIntegral . view (unpackedBytes . collectHalves) <$> sliceRom Offsets.sineData
   angleData' <- AngleData . listArrayFill 0 . fmap fromIntegral . view (unpackedBytes . collectHalves) <$> sliceRom Offsets.angleData
 
-  let collisionTextures = mapChunkTextures chunksTextures layout
+  let
+    collisionTextures = mapChunkTextures chunksTextures layout
+    levelData = LevelData angleData' layout chunkBlocks
 
   startPos <- sliceRom $ levelStartPos ehz1
   let
@@ -402,25 +523,36 @@ loadAndRun = do
         updateGame = do
           zoom player $ do
             s <- use statuses
-            if isJumping s
-            then do
-              objectMoveAndFall
-              collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
-            else
-              if jumpPressed
-              then runReaderT jump sineData'
-              else do
-                if rightPressed
-                then moveRight
-                else when leftPressed moveLeft
-                when (not rightPressed && not leftPressed) settle
-                objectMove
-                traction
-                collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
+            traceShow (playerRoutine s) $ pure ()
+            case playerRoutine s of
+              MdNormal -> do
+                if jumpPressed
+                then runReaderT jump sineData'
+                else do
+                  if rightPressed
+                  then moveRight
+                  else when leftPressed moveLeft
+                  when (not rightPressed && not leftPressed) settle
+                  objectMove
+                  traction
+                  runReaderT anglePos levelData
+              MdAir -> do
+                objectMoveAndFall
+                runReaderT doLevelCollision levelData
+              MdRoll ->
+                pure ()
+              MdJump -> do
+                objectMoveAndFall
+                runReaderT doLevelCollision levelData
+              -- collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
+                -- runReaderT doLevelCollision levelData
+                -- collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
           p' <- use (player . position . pixels)
           camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
           execState updateGame game
+
+      -- liftIO $ print $ execState (runReaderT doLevelCollision levelData) game ^. player
 
       -- let v = game' ^. player . playerVelocity
       -- liftIO . putStrLn . ("0x" ++) $ showHex (runReader (calcAngle (v ^. _x) (v ^. _y)) angleData') ""

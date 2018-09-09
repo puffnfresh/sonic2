@@ -8,8 +8,10 @@ module Game.Sega.Sonic.Player (
 , MdAir(..)
 , MdRoll(..)
 , HasPosition(..)
+, PlayerRoutine(..)
 , mdAir
 , mdRoll
+, playerRoutine
 , playerVelocity
 , playerRadius
 , playerTopSpeed
@@ -91,6 +93,23 @@ mdRoll =
 isJumping :: Statuses -> Bool
 isJumping s =
   s ^. mdAir == MdAirOn && s ^. mdRoll == MdRollOn
+
+data PlayerRoutine
+  = MdNormal
+  | MdAir
+  | MdRoll
+  | MdJump
+  deriving Show
+
+playerRoutine :: Statuses -> PlayerRoutine
+playerRoutine (Statuses MdAirOff MdRollOff) =
+  MdNormal
+playerRoutine (Statuses MdAirOff MdRollOn) =
+  MdRoll
+playerRoutine (Statuses MdAirOn MdRollOff) =
+  MdAir
+playerRoutine (Statuses MdAirOn MdRollOn) =
+  MdJump
 
 data MdAir
   = MdAirOn
