@@ -70,7 +70,6 @@ instance HasLevel LevelData where
 findTile :: (HasLevel s, MonadReader s m) => V2 CInt -> m Word16
 findTile p = do
   layout' <- asks layout
-  chunkBlocks' <- asks chunkBlocks
   let
     p' =
       p ^. pixels
@@ -78,10 +77,10 @@ findTile p = do
       (`div` 0x80) <$> p'
     chunkIndex =
       layout' !! fromIntegral layoutY !! fromIntegral layoutX
-    V2 blockX blockY =
-      ((`div` 0x10) . (`rem` 0x80)) <$> p'
-    ChunkBlock blockIndex _ _ =
-      (chunkBlocks' ! chunkIndex) ! fromIntegral ((blockY * 8) + blockX)
+    blockIndex =
+      fromIntegral chunkIndex * (0x80 :: Word16)
+        + fromIntegral (p' ^. _y .&. 0x70)
+        + fromIntegral (p' ^. _x .&. 0xE)
   pure blockIndex
 
 data WallDist
@@ -101,7 +100,7 @@ data WallDist
 findWall :: (HasLevel s, MonadReader s m) => V2 CInt -> CInt -> m WallDist
 findWall p delta = do
   blockIndex <- findTile p
-  if blockIndex .&. 0x3FFF == 0
+  if blockIndex .&. 0x3FF == 0
   then do
     WallDist a1 d1 a4 <- findWall2 (p & _x +~ delta)
     -- dist & distance +~ 0x10
@@ -116,7 +115,7 @@ findWall p delta = do
 
 findWall2 :: (HasLevel s, MonadReader s m) => V2 CInt -> m WallDist
 findWall2 p = do
-  blockIndex <- (.&. 0x3FFF) <$> findTile p
+  blockIndex <- (.&. 0x3FF) <$> findTile p
   if blockIndex == 0
   then do
     let
@@ -133,8 +132,9 @@ findWall2 p = do
 
 findFloor :: (HasLevel s, MonadReader s m) => V2 CInt -> CInt -> m WallDist
 findFloor p delta = do
-  blockIndex <- (.&. 0x3FFF) <$> findTile p
-  if blockIndex == 0
+  blockIndex <- (.&. 0x3FF) <$> findTile p
+  let d5 = 0xC
+  if blockIndex == 0 || not (testBit blockIndex d5)
   then do
     WallDist a1 d1 a4 <- findFloor2 (p & _y +~ delta)
     -- dist & distance +~ 0x10
@@ -149,8 +149,9 @@ findFloor p delta = do
 
 findFloor2 :: (HasLevel s, MonadReader s m) => V2 CInt -> m WallDist
 findFloor2 p = do
-  blockIndex <- (.&. 0x3FFF) <$> findTile p
-  if blockIndex == 0
+  blockIndex <- (.&. 0x3FF) <$> findTile p
+  let d5 = 0xC
+  if blockIndex == 0 || not (testBit blockIndex d5)
   then do
     let
       d1 =
@@ -378,45 +379,6 @@ x p = do
       (0x10 - flip' flipY pixelY) - (fromIntegral height + 2)
   pure $ WallDist blockIndex heightDifference angle'
 
-collideWithLevel :: (MonadState Player m) => [[Word8]] -> BoundedArray Word8 (BoundedArray Word8 ChunkBlock) -> BoundedArray Word16 CollisionBlock -> BoundedArray Word16 Word8 -> m ()
-collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves = do
-  radius' <- use playerRadius
-  let
-    radius =
-       fromIntegral <$> radius'
-    gravity =
-      V2 0 4
-    go = do
-      p' <- use (position . pixels)
-      let
-        V2 layoutX layoutY =
-          (`div` 0x80) <$> p' + radius
-        chunkIndex =
-          layout !! fromIntegral layoutY !! fromIntegral layoutX
-        V2 blockX blockY =
-          ((`div` 0x10) . (`rem` 0x80)) <$> p' + radius
-        ChunkBlock blockIndex flipX flipY =
-          (chunkBlocks ! chunkIndex) ! fromIntegral ((blockY * 8) + blockX)
-        V2 pixelX pixelY =
-          (`rem` 0x10) <$> p' + radius
-        CollisionBlock heights =
-          reindexedCollisionBlocks ! blockIndex
-        angle' =
-          (if flipX then negate else id) $ reindexedCurves ! blockIndex
-        flip' flag n =
-          if flag then 0xF - n else n
-        height =
-          fromMaybe 0 (heights ! fromIntegral (flip' flipX pixelX))
-        heightDifference =
-          (0x10 - flip' flipY pixelY) - (fromIntegral height + 2)
-      when (heightDifference < 0) $ do
-        position . pixels += V2 0 heightDifference
-        playerAngle .= angle'
-        resetOnFloor
-        go
-  position . pixels += gravity
-  go
-
 loadAndRun :: (MonadReader Game m, MonadError SonicError m, MonadIO m) => m ()
 loadAndRun = do
   sonicMappings <- loadSpriteMappings sonicOffsets
@@ -544,31 +506,16 @@ loadAndRun = do
               MdJump -> do
                 objectMoveAndFall
                 runReaderT doLevelCollision levelData
-              -- collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
-                -- runReaderT doLevelCollision levelData
-                -- collideWithLevel layout chunkBlocks reindexedCollisionBlocks reindexedCurves
           p' <- use (player . position . pixels)
           camera .= (fromIntegral <$> p') - V2 160 128 -- V2 o' p'
         game' =
           execState updateGame game
 
-      -- liftIO $ print $ execState (runReaderT doLevelCollision levelData) game ^. player
-
-      -- let v = game' ^. player . playerVelocity
-      -- liftIO . putStrLn . ("0x" ++) $ showHex (runReader (calcAngle (v ^. _x) (v ^. _y)) angleData') ""
-      -- liftIO . print $ game' ^. player . playerAngle
-      -- liftIO . print $ game' ^. player . playerInertia
-      -- liftIO . print $ game' ^. player . playerVelocity
-      -- liftIO . print $ game' ^. player . position
-      -- liftIO . print $ game' ^. player . position . pixels
       rendererDrawColor r $= V4 0 0 0 0xFF
       clear r
       render layoutChunkTextures (game' ^. camera)
-      -- render collisionTextures (game' ^. camera)
       runReaderT (renderSprite playerSprite'') game'
       present r
-      -- endTicks <- ticks
-      -- let difference = fromIntegral endTicks - fromIntegral startTicks
       delay 16
       unless qPressed (appLoop (stepSprite playerSprite'') game')
   game <- ask
