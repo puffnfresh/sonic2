@@ -7,5 +7,8 @@ haskellPackages.developPackage {
     halves = self.callPackage ./halves.nix { };
     kosinski = self.callPackage ./kosinski.nix { };
     megadrive-palette = self.callPackage ./megadrive-palette.nix { };
+    musashi = haskell.lib.appendConfigureFlag (self.callPackage ./musashi {
+      musashi = callPackage ./musashi/libmusashi.nix { };
+    }) "--gcc-option=-shared";
   };
 }

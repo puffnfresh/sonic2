@@ -9,14 +9,19 @@ module Game.Sega.Sonic.Game (
 , sliceRom
 , cameraX
 , cameraY
+, loadSineData
 ) where
 
 import           Control.Lens
 import           Control.Monad.Reader
+import           Data.Array.Bounded      (listArrayFill)
 import qualified Data.ByteString         as BS
+import           Data.ByteString.Lens    (unpackedBytes)
+import           Data.Halves             (collectHalves)
 import           Foreign.C.Types
 import           Game.Sega.Sonic.Offsets as Offsets
 import           Game.Sega.Sonic.Player
+import           Game.Sega.Sonic.Sine    (SineData (..))
 import           SDL
 
 data Game
@@ -48,6 +53,10 @@ instance HasCamera Game where
 
 class HasRom a where
   rom :: Lens' a BS.ByteString
+
+instance HasRom BS.ByteString where
+  rom =
+    id
 
 instance HasRom Game where
   rom =
@@ -88,3 +97,7 @@ cameraY =
       a
     g (V2 a _) b =
       V2 a b
+
+loadSineData :: (MonadReader g f, HasRom g) => f SineData
+loadSineData =
+  SineData . listArrayFill 0 . fmap fromIntegral . view (unpackedBytes . collectHalves) <$> sliceRom Offsets.sineData

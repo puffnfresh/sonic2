@@ -110,3 +110,7 @@ m68k_CPU_TYPE_68000 =
 m68k_REG_D0 :: CUInt
 m68k_REG_D0 =
   0
+
+m68k_REG_D1 :: CUInt
+m68k_REG_D1 =
+  1
