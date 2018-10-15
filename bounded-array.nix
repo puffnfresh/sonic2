@@ -4,8 +4,8 @@ mkDerivation {
   version = "0.1.0.0";
   src = fetchgit {
     url = "https://github.com/puffnfresh/bounded-array.git";
-    sha256 = "09h41d2g0vn5ninynclc6hfhpc0vilky9rrzfjs8y64liycsrwzv";
-    rev = "005130846ec90d9dd7f46ec3b9477741855a996d";
+    sha256 = "09v47c3v5ncvln2asq8ijlrb4f4agh0ibdaypmls8pnwhmh32p6g";
+    rev = "58990b068e8146ce29e177db0cd2cde85a0c125a";
   };
   libraryHaskellDepends = [ array base ];
   description = "Arrays with a value for every index";
