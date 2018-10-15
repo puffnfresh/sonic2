@@ -15,15 +15,15 @@ musashiRom :: IORef (Ptr a)
 musashiRom =
   unsafePerformIO (newIORef nullPtr)
 
-musashiPeekRom :: Storable a => Int -> IO a
+musashiPeekRom :: Storable a => CUInt -> IO a
 musashiPeekRom n = do
   r <- readIORef musashiRom
-  peekByteOff r n
+  peekByteOff r (fromIntegral n)
 
-musashiPokeRom :: Storable a => Int -> a -> IO ()
+musashiPokeRom :: Storable a => CUInt -> a -> IO ()
 musashiPokeRom n x = do
   r <- readIORef musashiRom
-  pokeByteOff r n x
+  pokeByteOff r (fromIntegral n) x
 
 musashiSetRom :: Ptr a -> IO ()
 musashiSetRom =
@@ -60,31 +60,31 @@ foreign import ccall m68k_execute :: CUInt -> IO CInt
 
 foreign import ccall m68k_cycles_remaining :: IO CInt
 
-foreign export ccall m68k_read_memory_8 :: Int -> IO Word8
+foreign export ccall m68k_read_memory_8 :: CUInt -> IO Word8
 
-m68k_read_memory_8 :: Int -> IO Word8
+m68k_read_memory_8 :: CUInt -> IO Word8
 m68k_read_memory_8 =
   musashiPeekRom
 
-foreign export ccall m68k_write_memory_8 :: Int -> Word8 -> IO ()
+foreign export ccall m68k_write_memory_8 :: CUInt -> Word8 -> IO ()
 
-m68k_write_memory_8 :: Int -> Word8 -> IO ()
+m68k_write_memory_8 :: CUInt -> Word8 -> IO ()
 m68k_write_memory_8 =
   musashiPokeRom
 
-foreign export ccall m68k_read_memory_16 :: Int -> IO Word16
+foreign export ccall m68k_read_memory_16 :: CUInt -> IO Word16
 
-m68k_read_memory_16 :: Int -> IO Word16
+m68k_read_memory_16 :: CUInt -> IO Word16
 m68k_read_memory_16 n =
   flip rotate 8 <$> musashiPeekRom n
 
-foreign export ccall m68k_write_memory_16 :: Int -> Word16 -> IO ()
+foreign export ccall m68k_write_memory_16 :: CUInt -> Word16 -> IO ()
 
-m68k_write_memory_16 :: Int -> Word16 -> IO ()
+m68k_write_memory_16 :: CUInt -> Word16 -> IO ()
 m68k_write_memory_16 n x =
   musashiPokeRom n (rotate x 8)
 
-foreign export ccall m68k_read_memory_32 :: Int -> IO Word32
+foreign export ccall m68k_read_memory_32 :: CUInt -> IO Word32
 
 reverse_bytes_32 :: Word32 -> Word32
 reverse_bytes_32 x =
@@ -93,13 +93,13 @@ reverse_bytes_32 x =
   .|. shiftR (x .&. 0x00FF0000) 8
   .|. shiftR (x .&. 0xFF000000) 24
 
-m68k_read_memory_32 :: Int -> IO Word32
+m68k_read_memory_32 :: CUInt -> IO Word32
 m68k_read_memory_32 n =
   reverse_bytes_32 <$> musashiPeekRom n
 
-foreign export ccall m68k_write_memory_32 :: Int -> Word32 -> IO ()
+foreign export ccall m68k_write_memory_32 :: CUInt -> Word32 -> IO ()
 
-m68k_write_memory_32 :: Int -> Word32 -> IO ()
+m68k_write_memory_32 :: CUInt -> Word32 -> IO ()
 m68k_write_memory_32 n =
   musashiPokeRom n . reverse_bytes_32
 
@@ -114,3 +114,47 @@ m68k_REG_D0 =
 m68k_REG_D1 :: CUInt
 m68k_REG_D1 =
   1
+
+m68k_REG_D2 :: CUInt
+m68k_REG_D2 =
+  2
+
+m68k_REG_D3 :: CUInt
+m68k_REG_D3 =
+  3
+
+m68k_REG_D4 :: CUInt
+m68k_REG_D4 =
+  4
+
+m68k_REG_D5 :: CUInt
+m68k_REG_D5 =
+  5
+
+m68k_REG_D6 :: CUInt
+m68k_REG_D6 =
+  6
+
+m68k_REG_D7 :: CUInt
+m68k_REG_D7 =
+  7
+
+m68k_REG_A0 :: CUInt
+m68k_REG_A0 =
+  8
+
+m68k_REG_A1 :: CUInt
+m68k_REG_A1 =
+  9
+
+m68k_REG_A2 :: CUInt
+m68k_REG_A2 =
+  10
+
+m68k_REG_A3 :: CUInt
+m68k_REG_A3 =
+  11
+
+m68k_REG_A4 :: CUInt
+m68k_REG_A4 =
+  12
